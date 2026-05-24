@@ -15,7 +15,7 @@ from firebase_admin import credentials, firestore
 # =========================
 # CONFIG
 # =========================
-TOKEN = os.getenv("BOT_TOKEN", "PUT_YOUR_TOKEN_HERE")
+TOKEN = os.getenv("BOT_TOKEN", "8731550935:AAHIGKyZZFTFsNKvf88PyjdSjwu1RL_lDFU")
 
 logging.basicConfig(level=logging.INFO)
 
