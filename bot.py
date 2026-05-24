@@ -2,6 +2,7 @@ import os
 import asyncio
 import logging
 import random
+import json
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
@@ -23,6 +24,22 @@ dp = Dispatcher()
 
 # =========================
 # FIREBASE INIT
+try:
+    firebase_json_str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+
+    if not firebase_json_str:
+        raise Exception("No Firebase env variable found")
+
+    firebase_info = json.loads(firebase_json_str)
+
+    cred = credentials.Certificate(firebase_info)
+    firebase_admin.initialize_app(cred)
+
+    db = firestore.client()
+    print("✅ Firebase подключен через ENV!")
+
+except Exception as e:
+    print(f"❌ Firebase error: {e}")
 # =========================
 
 try:
