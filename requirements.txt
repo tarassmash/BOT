@@ -1,0 +1,3 @@
+aiogram
+firebase-admin
+asyncio
