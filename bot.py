@@ -23,11 +23,8 @@ bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
 # =========================
-# FIREBASE INIT
-import json
-import os
-import firebase_admin
-from firebase_admin import credentials, firestore
+# FIREBASE INIT (ENV JSON)
+# =========================
 
 db = None
 
@@ -59,7 +56,6 @@ class Registration(StatesGroup):
     waiting_for_gender = State()
     waiting_for_search = State()
     waiting_for_about = State()
-
 
 # =========================
 # HELPERS
@@ -93,7 +89,6 @@ def main_menu():
     ]
     return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
-
 # =========================
 # START
 # =========================
@@ -114,7 +109,6 @@ async def start(message: types.Message, state: FSMContext):
     except Exception as e:
         logging.error(e)
         await message.answer("Помилка старту")
-
 
 # =========================
 # REGISTRATION FLOW
@@ -193,7 +187,6 @@ async def reg_about(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer("Готово!", reply_markup=main_menu())
 
-
 # =========================
 # FIND CANDIDATES
 # =========================
@@ -246,7 +239,6 @@ async def next_candidate(message: types.Message, uid: str):
     except Exception as e:
         logging.error(e)
 
-
 # =========================
 # LIKERS
 # =========================
@@ -285,7 +277,6 @@ async def next_liker(message: types.Message, uid: str):
 
     await message.answer(text, reply_markup=kb)
 
-
 # =========================
 # MENU
 # =========================
@@ -321,7 +312,6 @@ async def m3(message: types.Message):
 @dp.message(F.text == "4. Оцінили мене ❤️")
 async def m4(message: types.Message):
     await next_liker(message, str(message.from_user.id))
-
 
 # =========================
 # CALLBACKS
@@ -359,7 +349,6 @@ async def stop(cq: types.CallbackQuery):
     await cq.message.delete()
     await cq.message.answer("Стоп", reply_markup=main_menu())
 
-
 # =========================
 # RUN
 # =========================
@@ -367,7 +356,6 @@ async def stop(cq: types.CallbackQuery):
 async def main():
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
