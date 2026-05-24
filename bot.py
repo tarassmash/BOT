@@ -24,33 +24,30 @@ dp = Dispatcher()
 
 # =========================
 # FIREBASE INIT
+import json
+import os
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+db = None
+
 try:
-    firebase_json_str = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    firebase_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
 
-    if not firebase_json_str:
-        raise Exception("No Firebase env variable found")
+    if not firebase_json:
+        raise Exception("ENV GOOGLE_APPLICATION_CREDENTIALS_JSON пустой")
 
-    firebase_info = json.loads(firebase_json_str)
+    firebase_dict = json.loads(firebase_json)
 
-    cred = credentials.Certificate(firebase_info)
+    cred = credentials.Certificate(firebase_dict)
     firebase_admin.initialize_app(cred)
 
     db = firestore.client()
+
     print("✅ Firebase подключен через ENV!")
 
 except Exception as e:
     print(f"❌ Firebase error: {e}")
-# =========================
-
-try:
-    cred = credentials.Certificate("firebase_key.json")
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    print("🔥 Firebase connected")
-except Exception as e:
-    print("❌ Firebase error:", e)
-    db = None
-
 
 # =========================
 # STATES
