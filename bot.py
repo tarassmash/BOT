@@ -1,52 +1,1235 @@
-import os
+import logging
 import asyncio
-from aiogram import Bot, Dispatcher, types
+import random
+import traceback
+
+from aiohttp.client_exceptions import (
+    ClientConnectionError,
+    ClientConnectorError,
+    ServerDisconnectedError
+)
+
+from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+
+from aiogram.exceptions import (
+    TelegramNetworkError,
+    TelegramRetryAfter,
+    TelegramBadRequest,
+    TelegramForbiddenError
+)
 
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# ======================
-# ENV
-# ======================
-TOKEN = os.getenv("BOT_TOKEN")
+# =========================================================
+# LOGGING
+# =========================================================
 
-# Firebase init
-cred = credentials.Certificate("serviceAccount.json")
-firebase_admin.initialize_app(cred)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
 
-db = firestore.client()
+# =========================================================
+# FIREBASE
+# =========================================================
+
+try:
+
+    cred = credentials.Certificate("firebase_key.json")
+
+    firebase_admin.initialize_app(cred)
+
+    db = firestore.client()
+
+    print("✅ Firebase підключено!")
+
+except Exception as e:
+
+    print(f"❌ Firebase error: {e}")
+
+# =========================================================
+# BOT
+# =========================================================
+
+TOKEN = "8731550935:AAHIGKyZZFTFsNKvf88PyjdSjwu1RL_lDFU"
 
 bot = Bot(token=TOKEN)
+
 dp = Dispatcher()
 
-# ======================
-# START COMMAND
-# ======================
+# =========================================================
+# STATES
+# =========================================================
+
+class Registration(StatesGroup):
+
+    captcha = State()
+
+    waiting_for_name = State()
+
+    waiting_for_age = State()
+
+    waiting_for_country = State()
+
+    waiting_for_gender = State()
+
+    waiting_for_search = State()
+
+    waiting_for_photo = State()
+
+    waiting_for_about = State()
+
+# =========================================================
+# MENU
+# =========================================================
+
+def get_main_menu():
+
+    kb = [
+
+        [types.KeyboardButton(text="1. Дивитися анкети 👥")],
+
+        [types.KeyboardButton(text="2. Моя анкета 📝")],
+
+        [
+            types.KeyboardButton(text="3. Редагувати анкету ✏️"),
+            types.KeyboardButton(text="4. Видалити анкету ❌")
+        ]
+
+    ]
+
+    return types.ReplyKeyboardMarkup(
+        keyboard=kb,
+        resize_keyboard=True
+    )
+
+# =========================================================
+# SAFE FIREBASE
+# =========================================================
+
+async def firebase_get(ref):
+
+    for _ in range(5):
+
+        try:
+
+            return ref.get()
+
+        except Exception as e:
+
+            logging.error(f"Firebase GET error: {e}")
+
+            await asyncio.sleep(2)
+
+    return None
+
+
+async def firebase_set(ref, data):
+
+    for _ in range(5):
+
+        try:
+
+            ref.set(data)
+
+            return True
+
+        except Exception as e:
+
+            logging.error(f"Firebase SET error: {e}")
+
+            await asyncio.sleep(2)
+
+    return False
+
+
+async def firebase_delete(ref):
+
+    for _ in range(5):
+
+        try:
+
+            ref.delete()
+
+            return True
+
+        except Exception as e:
+
+            logging.error(f"Firebase DELETE error: {e}")
+
+            await asyncio.sleep(2)
+
+    return False
+
+# =========================================================
+# SAFE TELEGRAM
+# =========================================================
+
+async def safe_send_message(chat_id, text, **kwargs):
+
+    for _ in range(5):
+
+        try:
+
+            return await bot.send_message(
+                chat_id,
+                text,
+                **kwargs
+            )
+
+        except TelegramRetryAfter as e:
+
+            await asyncio.sleep(e.retry_after)
+
+        except (
+            TelegramNetworkError,
+            ClientConnectionError,
+            ClientConnectorError,
+            ServerDisconnectedError
+        ):
+
+            await asyncio.sleep(5)
+
+        except TelegramForbiddenError:
+
+            return None
+
+        except Exception as e:
+
+            logging.error(f"send_message error: {e}")
+
+            await asyncio.sleep(2)
+
+    return None
+
+
+async def safe_send_photo(chat_id, photo, caption=None, **kwargs):
+
+    for _ in range(5):
+
+        try:
+
+            return await bot.send_photo(
+                chat_id,
+                photo,
+                caption=caption,
+                **kwargs
+            )
+
+        except TelegramRetryAfter as e:
+
+            await asyncio.sleep(e.retry_after)
+
+        except (
+            TelegramNetworkError,
+            ClientConnectionError,
+            ClientConnectorError,
+            ServerDisconnectedError
+        ):
+
+            await asyncio.sleep(5)
+
+        except TelegramForbiddenError:
+
+            return None
+
+        except Exception as e:
+
+            logging.error(f"send_photo error: {e}")
+
+            await asyncio.sleep(2)
+
+    return None
+
+# =========================================================
+# INTERNET WATCHER
+# =========================================================
+
+async def internet_watcher():
+
+    while True:
+
+        try:
+
+            me = await bot.get_me()
+
+            logging.info(f"🌐 Internet OK @{me.username}")
+
+        except Exception as e:
+
+            logging.error(f"❌ INTERNET LOST: {e}")
+
+        await asyncio.sleep(30)
+
+# =========================================================
+# FIREBASE WATCHER
+# =========================================================
+
+async def firebase_watcher():
+
+    while True:
+
+        try:
+
+            db.collection("system").document("ping").set({
+
+                "time": firestore.SERVER_TIMESTAMP
+
+            })
+
+            logging.info("🔥 Firebase OK")
+
+        except Exception as e:
+
+            logging.error(f"Firebase dead: {e}")
+
+        await asyncio.sleep(60)
+
+# =========================================================
+# GLOBAL ERRORS
+# =========================================================
+
+@dp.errors()
+async def global_error_handler(event):
+
+    logging.error(traceback.format_exc())
+
+    try:
+
+        if hasattr(event, "update"):
+
+            upd = event.update
+
+            if upd.message:
+
+                await upd.message.answer(
+                    "⚠️ Тимчасова помилка"
+                )
+
+    except:
+        pass
+
+    return True
+
+# =========================================================
+# ANTI FLOOD
+# =========================================================
+
+user_last_message = {}
+
+ANTI_FLOOD_SECONDS = 1
+
+# =========================================================
+# START
+# =========================================================
+
 @dp.message(Command("start"))
-async def start(message: types.Message):
-    user = message.from_user
+async def cmd_start(message: types.Message, state: FSMContext):
 
-    # save to firebase
-    db.collection("users").document(str(user.id)).set({
-        "username": user.username,
-        "first_name": user.first_name
-    })
+    try:
 
-    await message.answer("Бот работает 🚀 Тебя добавили в Firebase!")
+        user_id = str(message.from_user.id)
 
-# ======================
-# ECHO
-# ======================
+        doc = await firebase_get(
+            db.collection("users").document(user_id)
+        )
+
+        if doc and doc.exists:
+
+            await message.answer(
+                "❤️ З поверненням!",
+                reply_markup=get_main_menu()
+            )
+
+            return
+
+        a = random.randint(1, 9)
+
+        b = random.randint(1, 9)
+
+        await state.update_data(
+            captcha_answer=a + b
+        )
+
+        await message.answer(
+
+            f"🤖 Перевірка що ти не бот\n\n"
+            f"{a} + {b} = ?"
+
+        )
+
+        await state.set_state(
+            Registration.captcha
+        )
+
+    except Exception as e:
+
+        logging.error(f"Start error: {e}")
+
+# =========================================================
+# CAPTCHA
+# =========================================================
+
+@dp.message(Registration.captcha)
+async def process_captcha(message: types.Message, state: FSMContext):
+
+    try:
+
+        if not message.text.isdigit():
+
+            return await message.answer(
+                "❌ Введи число"
+            )
+
+        data = await state.get_data()
+
+        if int(message.text) != data["captcha_answer"]:
+
+            a = random.randint(1, 9)
+
+            b = random.randint(1, 9)
+
+            await state.update_data(
+                captcha_answer=a + b
+            )
+
+            return await message.answer(
+
+                f"❌ Неправильно\n\n"
+                f"{a} + {b} = ?"
+
+            )
+
+        await message.answer(
+            "✅ Перевірку пройдено!"
+        )
+
+        await asyncio.sleep(1)
+
+        await message.answer(
+            "👋 Як тебе звати?"
+        )
+
+        await state.set_state(
+            Registration.waiting_for_name
+        )
+
+    except Exception as e:
+
+        logging.error(f"Captcha error: {e}")
+
+# =========================================================
+# NAME
+# =========================================================
+
+@dp.message(Registration.waiting_for_name)
+async def process_name(message: types.Message, state: FSMContext):
+
+    try:
+
+        name = message.text.strip()
+
+        if len(name) < 2:
+
+            return await message.answer(
+                "❌ Коротке ім'я"
+            )
+
+        await state.update_data(name=name)
+
+        await message.answer(
+            "🎂 Скільки тобі років?"
+        )
+
+        await state.set_state(
+            Registration.waiting_for_age
+        )
+
+    except Exception as e:
+
+        logging.error(f"Name error: {e}")
+
+# =========================================================
+# AGE
+# =========================================================
+
+@dp.message(Registration.waiting_for_age)
+async def process_age(message: types.Message, state: FSMContext):
+
+    try:
+
+        if not message.text.isdigit():
+
+            return await message.answer(
+                "❌ Введи число"
+            )
+
+        age = int(message.text)
+
+        if age < 16 or age > 70:
+
+            return await message.answer(
+                "❌ Вік 16-70"
+            )
+
+        await state.update_data(age=age)
+
+        kb = [
+
+            [types.KeyboardButton(text="Іспанія")],
+            [types.KeyboardButton(text="Польща")],
+            [types.KeyboardButton(text="Німеччина")],
+            [types.KeyboardButton(text="Чехія")],
+            [types.KeyboardButton(text="Італія")]
+
+        ]
+
+        await message.answer(
+
+            "🌍 Де ти зараз?",
+
+            reply_markup=types.ReplyKeyboardMarkup(
+                keyboard=kb,
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+
+        )
+
+        await state.set_state(
+            Registration.waiting_for_country
+        )
+
+    except Exception as e:
+
+        logging.error(f"Age error: {e}")
+
+# =========================================================
+# COUNTRY
+# =========================================================
+
+@dp.message(Registration.waiting_for_country)
+async def process_country(message: types.Message, state: FSMContext):
+
+    try:
+
+        await state.update_data(
+            country=message.text
+        )
+
+        kb = [[
+
+            types.KeyboardButton(
+                text="Я Чоловік 👱‍♂️"
+            ),
+
+            types.KeyboardButton(
+                text="Я Жінка 👩"
+            )
+
+        ]]
+
+        await message.answer(
+
+            "👤 Вкажи стать",
+
+            reply_markup=types.ReplyKeyboardMarkup(
+                keyboard=kb,
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+
+        )
+
+        await state.set_state(
+            Registration.waiting_for_gender
+        )
+
+    except Exception as e:
+
+        logging.error(f"Country error: {e}")
+
+# =========================================================
+# GENDER
+# =========================================================
+
+@dp.message(Registration.waiting_for_gender)
+async def process_gender(message: types.Message, state: FSMContext):
+
+    try:
+
+        await state.update_data(
+            gender=message.text
+        )
+
+        kb = [[
+
+            types.KeyboardButton(
+                text="Шукаю Дівчину 👩"
+            ),
+
+            types.KeyboardButton(
+                text="Шукаю Хлопця 👱‍♂️"
+            )
+
+        ]]
+
+        await message.answer(
+
+            "❤️ Кого шукаєш?",
+
+            reply_markup=types.ReplyKeyboardMarkup(
+                keyboard=kb,
+                resize_keyboard=True,
+                one_time_keyboard=True
+            )
+
+        )
+
+        await state.set_state(
+            Registration.waiting_for_search
+        )
+
+    except Exception as e:
+
+        logging.error(f"Gender error: {e}")
+
+# =========================================================
+# SEARCH
+# =========================================================
+
+@dp.message(Registration.waiting_for_search)
+async def process_search(message: types.Message, state: FSMContext):
+
+    try:
+
+        await state.update_data(
+            search=message.text
+        )
+
+        await message.answer(
+            "📸 Надішли фото"
+        )
+
+        await state.set_state(
+            Registration.waiting_for_photo
+        )
+
+    except Exception as e:
+
+        logging.error(f"Search error: {e}")
+
+# =========================================================
+# PHOTO
+# =========================================================
+
+@dp.message(Registration.waiting_for_photo, F.photo)
+async def process_photo(message: types.Message, state: FSMContext):
+
+    try:
+
+        await state.update_data(
+            photo=message.photo[-1].file_id
+        )
+
+        await message.answer(
+            "📝 Напиши про себе"
+        )
+
+        await state.set_state(
+            Registration.waiting_for_about
+        )
+
+    except Exception as e:
+
+        logging.error(f"Photo error: {e}")
+
+@dp.message(Registration.waiting_for_photo)
+async def photo_error(message: types.Message):
+
+    await message.answer(
+        "❌ Надішли фото"
+    )
+
+# =========================================================
+# ABOUT
+# =========================================================
+
+@dp.message(Registration.waiting_for_about)
+async def process_about(message: types.Message, state: FSMContext):
+
+    try:
+
+        data = await state.get_data()
+
+        user_id = str(message.from_user.id)
+
+        profile = {
+
+            "tg_id": user_id,
+
+            "username": message.from_user.username or "",
+
+            "name": data["name"],
+
+            "age": data["age"],
+
+            "country": data["country"],
+
+            "gender": data["gender"],
+
+            "search": data["search"],
+
+            "photo": data["photo"],
+
+            "about": message.text,
+
+            "registered_at": firestore.SERVER_TIMESTAMP
+
+        }
+
+        ok = await firebase_set(
+
+            db.collection("users").document(user_id),
+
+            profile
+
+        )
+
+        if not ok:
+
+            return await message.answer(
+                "❌ Firebase error"
+            )
+
+        await state.clear()
+
+        await message.answer(
+
+            "🎉 Анкету створено!",
+
+            reply_markup=get_main_menu()
+
+        )
+
+    except Exception as e:
+
+        logging.error(f"About error: {e}")
+
+# =========================================================
+# SEND NEXT PROFILE
+# =========================================================
+
+async def send_next_candidate(message: types.Message, user_id: str):
+
+    try:
+
+        my_doc = await firebase_get(
+            db.collection("users").document(user_id)
+        )
+
+        if not my_doc:
+
+            return await message.answer(
+                "❌ Firebase offline"
+            )
+
+        if not my_doc.exists:
+
+            return await message.answer(
+                "❌ Створи анкету"
+            )
+
+        my = my_doc.to_dict()
+
+        if "Дівчину" in my["search"]:
+
+            target_gender = "Я Жінка 👩"
+
+        else:
+
+            target_gender = "Я Чоловік 👱‍♂️"
+
+        docs = db.collection("users") \
+            .where("gender", "==", target_gender) \
+            .where("country", "==", my["country"]) \
+            .limit(100) \
+            .get()
+
+        candidates = []
+
+        for doc in docs:
+
+            try:
+
+                data = doc.to_dict()
+
+                if not data:
+                    continue
+
+                if doc.id == user_id:
+                    continue
+
+                if "photo" not in data:
+                    continue
+
+                candidates.append(data)
+
+            except:
+                pass
+
+        if not candidates:
+
+            return await message.answer(
+                "😔 Анкет немає"
+            )
+
+        seen_docs = db.collection("users") \
+            .document(user_id) \
+            .collection("seen") \
+            .get()
+
+        seen_ids = {
+
+            doc.id for doc in seen_docs
+
+        }
+
+        available = [
+
+            c for c in candidates
+
+            if c["tg_id"] not in seen_ids
+
+        ]
+
+        if not available:
+
+            available = candidates
+
+        candidate = random.choice(available)
+
+        await firebase_set(
+
+            db.collection("users")
+            .document(user_id)
+            .collection("seen")
+            .document(candidate["tg_id"]),
+
+            {
+                "ts": firestore.SERVER_TIMESTAMP
+            }
+
+        )
+
+        text = (
+
+            f"👤 {candidate['name']}, "
+            f"{candidate['age']}\n"
+
+            f"🌍 {candidate['country']}\n\n"
+
+            f"📝 {candidate['about']}"
+
+        )
+
+        kb = types.InlineKeyboardMarkup(
+
+            inline_keyboard=[
+
+                [
+
+                    types.InlineKeyboardButton(
+                        text="👍 Лайк",
+                        callback_data=f"like_{candidate['tg_id']}"
+                    ),
+
+                    types.InlineKeyboardButton(
+                        text="👎 Далі",
+                        callback_data="dislike"
+                    )
+
+                ],
+
+                [
+
+                    types.InlineKeyboardButton(
+                        text="💤 Завершити",
+                        callback_data="stop_search"
+                    )
+
+                ]
+
+            ]
+
+        )
+
+        await safe_send_photo(
+
+            message.chat.id,
+
+            candidate["photo"],
+
+            caption=text,
+
+            reply_markup=kb
+
+        )
+
+    except Exception as e:
+
+        logging.error(
+            f"Candidate error:\n{traceback.format_exc()}"
+        )
+
+# =========================================================
+# MENU SEARCH
+# =========================================================
+
+@dp.message(F.text == "1. Дивитися анкети 👥")
+async def menu_search(message: types.Message):
+
+    await message.answer(
+        "🔍 Шукаю анкети..."
+    )
+
+    await send_next_candidate(
+        message,
+        str(message.from_user.id)
+    )
+
+# =========================================================
+# MY PROFILE
+# =========================================================
+
+@dp.message(F.text == "2. Моя анкета 📝")
+async def menu_profile(message: types.Message):
+
+    try:
+
+        user_id = str(message.from_user.id)
+
+        doc = await firebase_get(
+            db.collection("users").document(user_id)
+        )
+
+        if not doc or not doc.exists:
+
+            return await message.answer(
+                "❌ Анкета не знайдена"
+            )
+
+        p = doc.to_dict()
+
+        text = (
+
+            f"👤 {p['name']}, {p['age']}\n"
+
+            f"🌍 {p['country']}\n\n"
+
+            f"📝 {p['about']}"
+
+        )
+
+        await safe_send_photo(
+
+            message.chat.id,
+
+            p["photo"],
+
+            caption=text
+
+        )
+
+    except Exception as e:
+
+        logging.error(f"My profile error: {e}")
+
+# =========================================================
+# EDIT
+# =========================================================
+
+@dp.message(F.text == "3. Редагувати анкету ✏️")
+async def menu_edit(message: types.Message):
+
+    await message.answer(
+
+        "✏️ Видали стару анкету\n"
+        "і створи нову через /start"
+
+    )
+
+# =========================================================
+# DELETE
+# =========================================================
+
+@dp.message(F.text == "4. Видалити анкету ❌")
+async def menu_delete(message: types.Message):
+
+    try:
+
+        user_id = str(message.from_user.id)
+
+        ref = db.collection("users").document(user_id)
+
+        doc = await firebase_get(ref)
+
+        if not doc or not doc.exists:
+
+            return await message.answer(
+                "❌ Анкети немає"
+            )
+
+        ok = await firebase_delete(ref)
+
+        if not ok:
+
+            return await message.answer(
+                "❌ Firebase error"
+            )
+
+        await message.answer(
+
+            "✅ Анкету видалено",
+
+            reply_markup=types.ReplyKeyboardRemove()
+
+        )
+
+    except Exception as e:
+
+        logging.error(f"Delete error: {e}")
+
+# =========================================================
+# LIKE
+# =========================================================
+
+@dp.callback_query(F.data.startswith("like_"))
+async def handle_like(callback: types.CallbackQuery):
+
+    try:
+
+        my_id = str(callback.from_user.id)
+
+        target_id = callback.data.split("_")[1]
+
+        await firebase_set(
+
+            db.collection("users")
+            .document(my_id)
+            .collection("likes")
+            .document(target_id),
+
+            {
+                "ts": firestore.SERVER_TIMESTAMP
+            }
+
+        )
+
+        reverse_like = await firebase_get(
+
+            db.collection("users")
+            .document(target_id)
+            .collection("likes")
+            .document(my_id)
+
+        )
+
+        if reverse_like and reverse_like.exists:
+
+            me = (
+                await firebase_get(
+                    db.collection("users").document(my_id)
+                )
+            ).to_dict()
+
+            them = (
+                await firebase_get(
+                    db.collection("users").document(target_id)
+                )
+            ).to_dict()
+
+            await safe_send_message(
+
+                my_id,
+
+                f"🎉 МЕТЧ!\n"
+                f"Пиши @{them.get('username', '')}"
+
+            )
+
+            await safe_send_message(
+
+                target_id,
+
+                f"🎉 МЕТЧ!\n"
+                f"Пиши @{me.get('username', '')}"
+
+            )
+
+        try:
+
+            await callback.message.delete()
+
+        except:
+            pass
+
+        await send_next_candidate(
+            callback.message,
+            my_id
+        )
+
+    except Exception as e:
+
+        logging.error(f"Like error: {e}")
+
+# =========================================================
+# DISLIKE
+# =========================================================
+
+@dp.callback_query(F.data == "dislike")
+async def handle_dislike(callback: types.CallbackQuery):
+
+    try:
+
+        await callback.message.delete()
+
+    except:
+        pass
+
+    await send_next_candidate(
+
+        callback.message,
+
+        str(callback.from_user.id)
+
+    )
+
+# =========================================================
+# STOP SEARCH
+# =========================================================
+
+@dp.callback_query(F.data == "stop_search")
+async def handle_stop(callback: types.CallbackQuery):
+
+    try:
+
+        await callback.message.delete()
+
+    except:
+        pass
+
+    await callback.message.answer(
+
+        "🛑 Пошук зупинено",
+
+        reply_markup=get_main_menu()
+
+    )
+
+# =========================================================
+# UNKNOWN
+# =========================================================
+
 @dp.message()
-async def echo(message: types.Message):
-    await message.answer(f"Ты написал: {message.text}")
+async def unknown_message(message: types.Message):
 
-# ======================
+    user_id = message.from_user.id
+
+    now = asyncio.get_event_loop().time()
+
+    last = user_last_message.get(user_id, 0)
+
+    if now - last < ANTI_FLOOD_SECONDS:
+        return
+
+    user_last_message[user_id] = now
+
+    await message.answer(
+        "❓ Використовуй меню або /start"
+    )
+
+# =========================================================
 # MAIN
-# ======================
+# =========================================================
+
 async def main():
-    await dp.start_polling(bot)
+
+    while True:
+
+        try:
+
+            print("🛠 Очищення webhook")
+
+            await bot.delete_webhook(
+                drop_pending_updates=True
+            )
+
+            print("🚀 Бот запущено!")
+
+            asyncio.create_task(
+                internet_watcher()
+            )
+
+            asyncio.create_task(
+                firebase_watcher()
+            )
+
+            await dp.start_polling(
+
+                bot,
+
+                skip_updates=True
+
+            )
+
+        except KeyboardInterrupt:
+
+            print("⛔ Bot stopped")
+
+            break
+
+        except (
+            TelegramNetworkError,
+            ClientConnectionError,
+            ClientConnectorError,
+            ServerDisconnectedError
+        ) as e:
+
+            logging.error(f"Internet lost: {e}")
+
+            print("♻️ Reconnect after 10 sec")
+
+            await asyncio.sleep(10)
+
+        except Exception as e:
+
+            logging.error(
+                f"MAIN CRASH:\n{traceback.format_exc()}"
+            )
+
+            print("♻️ Restart after 15 sec")
+
+            await asyncio.sleep(15)
+
+        finally:
+
+            try:
+
+                await bot.session.close()
+
+            except:
+                pass
+
+# =========================================================
+# RUN
+# =========================================================
 
 if __name__ == "__main__":
+
     asyncio.run(main())
+
