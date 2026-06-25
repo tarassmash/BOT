@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, TelegramForbiddenError
 import firebase_admin
-from firebase_admin import credentials, firestore
+from firebase_admin import credentials, firestore, storage
 # =========================================================
 # DISCLAIMER & CONFIG
 # =========================================================
@@ -90,16 +90,27 @@ if firebase_json_raw:
 # =========================================================
 try:
     cred = credentials.Certificate("firebase_key.json")
-    firebase_admin.initialize_app(cred)
+    firebase_admin.initialize_app(cred, {
+        'storageBucket': os.getenv("FIREBASE_STORAGE_BUCKET", "")
+    })
     db = firestore.client()
-    print("✅ Firebase підключено!")
+    try:
+        bucket = storage.bucket()
+        print("✅ Firebase підключено! (Firestore + Storage)")
+    except:
+        bucket = None
+        print("⚠️ Firebase Storage не налаштовано (потрібен FIREBASE_STORAGE_BUCKET)")
 except Exception as e:
     print(f"❌ Firebase error: {e}")
     db = None
+    bucket = None
 # Забираем токен из переменных окружения Railway (с фолбеком на твой текущий)
 TOKEN = os.getenv("BOT_TOKEN", "8731550935:AAF_XmQNZjBmtnhtQ-cIJ3gFvYswg-eDiZs")
+ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN")
 ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
+
 bot = Bot(token=TOKEN)
+admin_bot = Bot(token=ADMIN_BOT_TOKEN) if ADMIN_BOT_TOKEN else None
 dp = Dispatcher()
 # =========================================================
 # STATES
@@ -436,6 +447,12 @@ async def process_about(message: types.Message, state: FSMContext):
         data = await state.get_data()
         user_id = str(message.from_user.id)
         referrer = data.get("referrer")
+        
+        # Завантажуємо фото в Firebase Storage
+        photo_url = None
+        if data.get("photo"):
+            photo_url = await upload_photo_to_storage(data["photo"], user_id)
+        
         profile = {
             "tg_id": user_id,
             "username": message.from_user.username or "",
@@ -444,7 +461,8 @@ async def process_about(message: types.Message, state: FSMContext):
             "country": data["country"],
             "gender": data["gender"],
             "search": data["search"],
-            "photo": data["photo"],
+            "photo": data["photo"],           # Залишаємо file_id для сумісності
+            "photo_url": photo_url,           # Пряме посилання з Firebase Storage
             "about": message.text,
             "registered_at": firestore.SERVER_TIMESTAMP,
             "search_filters": {"country": None, "min_age": None, "max_age": None},
@@ -453,10 +471,52 @@ async def process_about(message: types.Message, state: FSMContext):
             "disclaimer_seen": False,
             "report_count": 0,
             "banned": False,
+            "approved": False,
             "banned_at": None,
             "ban_reason": None
         }
         await firebase_set(db.collection("users").document(user_id), profile)
+
+        # Надсилаємо нову анкету на перевірку в приватний бот адміна
+        if admin_bot:
+            try:
+                admin_text = (
+                    f"🆕 <b>НОВИЙ КОРИСТУВАЧ НА ПЕРЕВІРКУ</b>\n\n"
+                    f"👤 <b>{data['name']}</b>, {data['age']} років\n"
+                    f"🌍 {data['country']}\n"
+                    f"👤 {data['gender']}\n"
+                    f"❤️ Шукає: {data['search']}\n\n"
+                    f"📝 {message.text}\n\n"
+                    f"ID: <code>{user_id}</code>"
+                )
+                
+                if photo_url:
+                    await admin_bot.send_photo(
+                        chat_id=ADMIN_IDS[0] if ADMIN_IDS else None,
+                        photo=photo_url,
+                        caption=admin_text,
+                        parse_mode="HTML",
+                        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                            [
+                                types.InlineKeyboardButton(text="✅ Схвалити", callback_data=f"approve_{user_id}"),
+                                types.InlineKeyboardButton(text="❌ Відхилити", callback_data=f"reject_{user_id}")
+                            ]
+                        ])
+                    )
+                else:
+                    await admin_bot.send_message(
+                        chat_id=ADMIN_IDS[0] if ADMIN_IDS else None,
+                        text=admin_text,
+                        parse_mode="HTML",
+                        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                            [
+                                types.InlineKeyboardButton(text="✅ Схвалити", callback_data=f"approve_{user_id}"),
+                                types.InlineKeyboardButton(text="❌ Відхилити", callback_data=f"reject_{user_id}")
+                            ]
+                        ])
+                    )
+            except Exception as e:
+                logging.error(f"Send to admin bot error: {e}")
         if referrer:
             unlock_time = int(time.time()) + 600
             ref_doc = await firebase_get(db.collection("users").document(referrer))
@@ -467,11 +527,10 @@ async def process_about(message: types.Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "🎉 Анкету створено!\n\n"
-            "📍 Хочеш додати локацію, щоб бачити людей поруч?\n"
-            "Надішли локацію (скріпка → Локація) або напиши «Пропустити»",
-            reply_markup=types.ReplyKeyboardRemove()
+            "⏳ Твоя анкета відправлена на перевірку адміну.\n"
+            "Як тільки її схвалять — ти отримаєш повідомлення і зможеш користуватися ботом.",
+            reply_markup=get_main_menu()
         )
-        await state.set_state(Registration.waiting_for_location)
     except Exception as e:
         logging.error(f"About error: {e}")
 @dp.message(Registration.waiting_for_location, F.location)
@@ -565,6 +624,24 @@ async def ban_user(user_id: str, reason: str = "Багато скарг від �
             logging.info(f"User {user_id} banned. Reason: {reason}")
     except Exception as e:
         logging.error(f"Ban user error: {e}")
+
+async def upload_photo_to_storage(file_id: str, user_id: str) -> str:
+    """Завантажує фото з Telegram у Firebase Storage і повертає публічне посилання"""
+    if bucket is None:
+        return None
+    try:
+        file = await bot.get_file(file_id)
+        file_bytes = await file.download_as_bytearray()
+        
+        blob = bucket.blob(f"photos/{user_id}.jpg")
+        blob.upload_from_string(bytes(file_bytes), content_type="image/jpeg")
+        blob.make_public()
+        
+        return blob.public_url
+    except Exception as e:
+        logging.error(f"Upload photo to Storage error: {e}")
+        return None
+
 
 async def increment_report_count(reported_id: str, reporter_id: str, reason_text: str):
     """Збільшує лічильник скарг і перевіряє на бан"""
@@ -684,9 +761,12 @@ async def menu_search(message: types.Message, state: FSMContext):
     user_id = str(message.from_user.id)
     if await is_user_banned(user_id):
         return await message.answer("🚫 Твоя анкета заблокована. Доступ до пошуку закрито.")
+    
     doc = await firebase_get(db.collection("users").document(user_id))
     if doc and doc.exists:
         data = doc.to_dict() or {}
+        if not data.get("approved", False):
+            return await message.answer("⏳ Твоя анкета ще на перевірці. Зачекай на схвалення від адміна.")
         if not data.get("disclaimer_seen"):
             await message.answer(DISCLAIMER_TEXT, parse_mode="HTML")
             await firebase_set(db.collection("users").document(user_id), {**data, "disclaimer_seen": True})
@@ -700,7 +780,12 @@ async def menu_search_with_filters(message: types.Message, state: FSMContext):
     user_id = str(message.from_user.id)
     if await is_user_banned(user_id):
         return await message.answer("🚫 Твоя анкета заблокована. Доступ до пошуку закрито.")
+    
     doc = await firebase_get(db.collection("users").document(user_id))
+    if doc and doc.exists:
+        data = doc.to_dict() or {}
+        if not data.get("approved", False):
+            return await message.answer("⏳ Твоя анкета ще на перевірці. Зачекай на схвалення від адміна.")
     if not doc or not doc.exists:
         return await message.answer("❌ Спочатку створи анкету через /start")
     data = doc.to_dict() or {}
@@ -1218,6 +1303,72 @@ async def handle_ban_from_report(callback: types.CallbackQuery):
 async def handle_ignore_report(callback: types.CallbackQuery):
     await callback.answer("Пропущено")
     await callback.message.edit_text("✅ Скарга пропущена (не забанили).")
+
+
+# =========================================================
+# ADMIN APPROVAL SYSTEM (окремий бот адміна)
+# =========================================================
+@dp.callback_query(F.data.startswith("approve_"))
+async def handle_approve(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ заборонено", show_alert=True)
+        return
+
+    user_id = callback.data.split("_")[1]
+    
+    try:
+        doc = await firebase_get(db.collection("users").document(user_id))
+        if doc and doc.exists:
+            data = doc.to_dict() or {}
+            await firebase_set(db.collection("users").document(user_id), {
+                **data,
+                "approved": True
+            })
+            
+            # Повідомляємо користувача
+            await safe_send_message(
+                user_id,
+                "✅ <b>Вітаємо!</b> Твою анкету схвалено!\n\n"
+                "Тепер ти можеш користуватися ботом і переглядати анкети.",
+                parse_mode="HTML",
+                reply_markup=get_main_menu()
+            )
+            
+            await callback.message.edit_text(
+                f"✅ Користувач <code>{user_id}</code> схвалений.",
+                parse_mode="HTML"
+            )
+    except Exception as e:
+        logging.error(f"Approve error: {e}")
+        await callback.answer("Помилка при схваленні", show_alert=True)
+
+
+@dp.callback_query(F.data.startswith("reject_"))
+async def handle_reject(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Доступ заборонено", show_alert=True)
+        return
+
+    user_id = callback.data.split("_")[1]
+    
+    try:
+        # Видаляємо анкету при відхиленні
+        await firebase_delete(db.collection("users").document(user_id))
+        
+        await safe_send_message(
+            user_id,
+            "❌ На жаль, твою анкету відхилено.\n\n"
+            "Якщо вважаєш, що це помилка — можеш спробувати зареєструватися знову через /start.",
+            parse_mode="HTML"
+        )
+        
+        await callback.message.edit_text(
+            f"❌ Користувач <code>{user_id}</code> відхилений і видалений.",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logging.error(f"Reject error: {e}")
+        await callback.answer("Помилка при відхиленні", show_alert=True)
 # =========================================================
 # ASYNC MAIN RUNNER
 # =========================================================
