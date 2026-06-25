@@ -12,7 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, TelegramForbiddenError
 import firebase_admin
-from firebase_admin import credentials, firestore, storage
+from firebase_admin import credentials, firestore
 # =========================================================
 # DISCLAIMER & CONFIG
 # =========================================================
@@ -90,27 +90,15 @@ if firebase_json_raw:
 # =========================================================
 try:
     cred = credentials.Certificate("firebase_key.json")
-    firebase_admin.initialize_app(cred, {
-        'storageBucket': os.getenv("FIREBASE_STORAGE_BUCKET", "")
-    })
+    firebase_admin.initialize_app(cred)
     db = firestore.client()
-    try:
-        bucket = storage.bucket()
-        print("✅ Firebase підключено! (Firestore + Storage)")
-    except:
-        bucket = None
-        print("⚠️ Firebase Storage не налаштовано (потрібен FIREBASE_STORAGE_BUCKET)")
+    print("✅ Firebase підключено!")
 except Exception as e:
     print(f"❌ Firebase error: {e}")
     db = None
-    bucket = None
 # Забираем токен из переменных окружения Railway (с фолбеком на твой текущий)
 TOKEN = os.getenv("BOT_TOKEN", "8731550935:AAF_XmQNZjBmtnhtQ-cIJ3gFvYswg-eDiZs")
-ADMIN_BOT_TOKEN = os.getenv("ADMIN_BOT_TOKEN")
-ADMIN_IDS = [int(x.strip()) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
-
 bot = Bot(token=TOKEN)
-admin_bot = Bot(token=ADMIN_BOT_TOKEN) if ADMIN_BOT_TOKEN else None
 dp = Dispatcher()
 # =========================================================
 # STATES
@@ -447,12 +435,6 @@ async def process_about(message: types.Message, state: FSMContext):
         data = await state.get_data()
         user_id = str(message.from_user.id)
         referrer = data.get("referrer")
-        
-        # Завантажуємо фото в Firebase Storage
-        photo_url = None
-        if data.get("photo"):
-            photo_url = await upload_photo_to_storage(data["photo"], user_id)
-        
         profile = {
             "tg_id": user_id,
             "username": message.from_user.username or "",
@@ -461,8 +443,7 @@ async def process_about(message: types.Message, state: FSMContext):
             "country": data["country"],
             "gender": data["gender"],
             "search": data["search"],
-            "photo": data["photo"],           # Залишаємо file_id для сумісності
-            "photo_url": photo_url,           # Пряме посилання з Firebase Storage
+            "photo": data["photo"],
             "about": message.text,
             "registered_at": firestore.SERVER_TIMESTAMP,
             "search_filters": {"country": None, "min_age": None, "max_age": None},
@@ -471,52 +452,10 @@ async def process_about(message: types.Message, state: FSMContext):
             "disclaimer_seen": False,
             "report_count": 0,
             "banned": False,
-            "approved": False,
             "banned_at": None,
             "ban_reason": None
         }
         await firebase_set(db.collection("users").document(user_id), profile)
-
-        # Надсилаємо нову анкету на перевірку в приватний бот адміна
-        if admin_bot:
-            try:
-                admin_text = (
-                    f"🆕 <b>НОВИЙ КОРИСТУВАЧ НА ПЕРЕВІРКУ</b>\n\n"
-                    f"👤 <b>{data['name']}</b>, {data['age']} років\n"
-                    f"🌍 {data['country']}\n"
-                    f"👤 {data['gender']}\n"
-                    f"❤️ Шукає: {data['search']}\n\n"
-                    f"📝 {message.text}\n\n"
-                    f"ID: <code>{user_id}</code>"
-                )
-                
-                if photo_url:
-                    await admin_bot.send_photo(
-                        chat_id=ADMIN_IDS[0] if ADMIN_IDS else None,
-                        photo=photo_url,
-                        caption=admin_text,
-                        parse_mode="HTML",
-                        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                            [
-                                types.InlineKeyboardButton(text="✅ Схвалити", callback_data=f"approve_{user_id}"),
-                                types.InlineKeyboardButton(text="❌ Відхилити", callback_data=f"reject_{user_id}")
-                            ]
-                        ])
-                    )
-                else:
-                    await admin_bot.send_message(
-                        chat_id=ADMIN_IDS[0] if ADMIN_IDS else None,
-                        text=admin_text,
-                        parse_mode="HTML",
-                        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                            [
-                                types.InlineKeyboardButton(text="✅ Схвалити", callback_data=f"approve_{user_id}"),
-                                types.InlineKeyboardButton(text="❌ Відхилити", callback_data=f"reject_{user_id}")
-                            ]
-                        ])
-                    )
-            except Exception as e:
-                logging.error(f"Send to admin bot error: {e}")
         if referrer:
             unlock_time = int(time.time()) + 600
             ref_doc = await firebase_get(db.collection("users").document(referrer))
@@ -527,10 +466,11 @@ async def process_about(message: types.Message, state: FSMContext):
         await state.clear()
         await message.answer(
             "🎉 Анкету створено!\n\n"
-            "⏳ Твоя анкета відправлена на перевірку адміну.\n"
-            "Як тільки її схвалять — ти отримаєш повідомлення і зможеш користуватися ботом.",
-            reply_markup=get_main_menu()
+            "📍 Хочеш додати локацію, щоб бачити людей поруч?\n"
+            "Надішли локацію (скріпка → Локація) або напиши «Пропустити»",
+            reply_markup=types.ReplyKeyboardRemove()
         )
+        await state.set_state(Registration.waiting_for_location)
     except Exception as e:
         logging.error(f"About error: {e}")
 @dp.message(Registration.waiting_for_location, F.location)
@@ -584,16 +524,6 @@ async def is_user_banned(user_id: str) -> bool:
         logging.error(f"Ban check error: {e}")
     return False
 
-async def notify_admins(text: str):
-    """Надсилає повідомлення всім адміністраторам"""
-    if not ADMIN_IDS:
-        return
-    for admin_id in ADMIN_IDS:
-        try:
-            await safe_send_message(admin_id, text, parse_mode="HTML")
-        except Exception as e:
-            logging.error(f"Failed to notify admin {admin_id}: {e}")
-
 async def ban_user(user_id: str, reason: str = "Багато скарг від користувачів"):
     """Банить користувача"""
     try:
@@ -609,39 +539,12 @@ async def ban_user(user_id: str, reason: str = "Багато скарг від �
             await safe_send_message(user_id, 
                 "🚫 <b>Твою анкету заблоковано!</b>\n\n"
                 f"Причина: {reason}\n\n"
-                "Якщо вважаєш, що це помилка — напиши в підтримку.",
+                "Якщо вважаєш, що це помилка — напиши в підтримку (поки що через @username_support якщо є).",
                 parse_mode="HTML"
             )
-            
-            # Повідомляємо адміністраторів
-            await notify_admins(
-                f"🚫 <b>НОВИЙ БАН</b>\n\n"
-                f"Користувач: <code>{user_id}</code>\n"
-                f"Причина: {reason}\n"
-                f"Час: {time.strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-            
             logging.info(f"User {user_id} banned. Reason: {reason}")
     except Exception as e:
         logging.error(f"Ban user error: {e}")
-
-async def upload_photo_to_storage(file_id: str, user_id: str) -> str:
-    """Завантажує фото з Telegram у Firebase Storage і повертає публічне посилання"""
-    if bucket is None:
-        return None
-    try:
-        file = await bot.get_file(file_id)
-        file_bytes = await file.download_as_bytearray()
-        
-        blob = bucket.blob(f"photos/{user_id}.jpg")
-        blob.upload_from_string(bytes(file_bytes), content_type="image/jpeg")
-        blob.make_public()
-        
-        return blob.public_url
-    except Exception as e:
-        logging.error(f"Upload photo to Storage error: {e}")
-        return None
-
 
 async def increment_report_count(reported_id: str, reporter_id: str, reason_text: str):
     """Збільшує лічильник скарг і перевіряє на бан"""
@@ -761,12 +664,9 @@ async def menu_search(message: types.Message, state: FSMContext):
     user_id = str(message.from_user.id)
     if await is_user_banned(user_id):
         return await message.answer("🚫 Твоя анкета заблокована. Доступ до пошуку закрито.")
-    
     doc = await firebase_get(db.collection("users").document(user_id))
     if doc and doc.exists:
         data = doc.to_dict() or {}
-        if not data.get("approved", False):
-            return await message.answer("⏳ Твоя анкета ще на перевірці. Зачекай на схвалення від адміна.")
         if not data.get("disclaimer_seen"):
             await message.answer(DISCLAIMER_TEXT, parse_mode="HTML")
             await firebase_set(db.collection("users").document(user_id), {**data, "disclaimer_seen": True})
@@ -780,12 +680,7 @@ async def menu_search_with_filters(message: types.Message, state: FSMContext):
     user_id = str(message.from_user.id)
     if await is_user_banned(user_id):
         return await message.answer("🚫 Твоя анкета заблокована. Доступ до пошуку закрито.")
-    
     doc = await firebase_get(db.collection("users").document(user_id))
-    if doc and doc.exists:
-        data = doc.to_dict() or {}
-        if not data.get("approved", False):
-            return await message.answer("⏳ Твоя анкета ще на перевірці. Зачекай на схвалення від адміна.")
     if not doc or not doc.exists:
         return await message.answer("❌ Спочатку створи анкету через /start")
     data = doc.to_dict() or {}
@@ -1109,266 +1004,6 @@ async def handle_report_cancel(callback: types.CallbackQuery):
     await callback.message.delete()
     user_id = str(callback.from_user.id)
     await send_next_candidate(callback.message, user_id)
-
-# =========================================================
-# ADMIN COMMANDS (ручний бан / розбан)
-# =========================================================
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
-
-@dp.message(Command("ban"))
-async def cmd_ban(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return  # silently ignore non-admins
-    
-    args = message.text.split(maxsplit=2)
-    if len(args) < 2:
-        return await message.answer("Використання: /ban <user_id> [причина]")
-    
-    try:
-        target_id = int(args[1])
-    except ValueError:
-        return await message.answer("❌ user_id має бути числом")
-    
-    reason = args[2] if len(args) > 2 else "Ручний бан адміністратором"
-    
-    # Перевіряємо чи існує користувач
-    doc = await firebase_get(db.collection("users").document(str(target_id)))
-    if not doc or not doc.exists:
-        return await message.answer(f"❌ Користувач з ID {target_id} не знайдений у базі")
-    
-    await ban_user(str(target_id), reason)
-    await message.answer(f"✅ Користувач <code>{target_id}</code> забанений.\nПричина: {reason}", parse_mode="HTML")
-
-@dp.message(Command("unban"))
-async def cmd_unban(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
-    
-    args = message.text.split()
-    if len(args) < 2:
-        return await message.answer("Використання: /unban <user_id>")
-    
-    try:
-        target_id = int(args[1])
-    except ValueError:
-        return await message.answer("❌ user_id має бути числом")
-    
-    doc = await firebase_get(db.collection("users").document(str(target_id)))
-    if not doc or not doc.exists:
-        return await message.answer(f"❌ Користувач з ID {target_id} не знайдений")
-    
-    data = doc.to_dict() or {}
-    if not data.get("banned", False):
-        return await message.answer("ℹ️ Цей користувач не забанений.")
-    
-    # Знімаємо бан
-    await firebase_set(db.collection("users").document(str(target_id)), {
-        **data,
-        "banned": False,
-        "banned_at": None,
-        "ban_reason": None
-    })
-    
-    await safe_send_message(str(target_id), "✅ <b>Твій бан знято!</b>\nТепер ти знову можеш користуватися ботом.", parse_mode="HTML")
-    await message.answer(f"✅ Бан знято з користувача <code>{target_id}</code>", parse_mode="HTML")
-    
-    # Повідомляємо інших адмінів
-    await notify_admins(f"✅ <b>РОЗБАН</b>\nКористувач: <code>{target_id}</code>\nАдмін: {message.from_user.id}")
-
-@dp.message(Command("banstats"))
-async def cmd_banstats(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return
-    
-    # Проста статистика: топ-10 за report_count
-    try:
-        docs = await asyncio.to_thread(lambda: db.collection("users").order_by("report_count", direction=firestore.Query.DESCENDING).limit(10).get())
-        text = "📊 <b>Топ користувачів за кількістю скарг:</b>\n\n"
-        for doc in docs:
-            d = doc.to_dict() or {}
-            if d.get("report_count", 0) > 0:
-                text += f"• <code>{doc.id}</code> — {d.get('report_count')} скарг"
-                if d.get("banned"):
-                    text += " 🚫 ЗАБАНЕНИЙ"
-                text += "\n"
-        await message.answer(text, parse_mode="HTML")
-    except Exception as e:
-        await message.answer(f"Помилка при отриманні статистики: {e}")
-
-
-# =========================================================
-# REPORTS VIEWING (для адмінів)
-# =========================================================
-@dp.message(Command("reports"))
-async def cmd_reports(message: types.Message):
-    if not is_admin(message.from_user.id):
-        return await message.answer("❌ Доступ заборонено")
-
-    args = message.text.split()
-    limit = 10
-    target_user = None
-
-    if len(args) > 1:
-        if args[1].isdigit():
-            target_user = args[1]
-        else:
-            try:
-                limit = int(args[1])
-            except:
-                limit = 10
-
-    try:
-        query = db.collection("reports")
-        if target_user:
-            query = query.where("reported_id", "==", target_user)
-        
-        query = query.order_by("timestamp", direction=firestore.Query.DESCENDING).limit(limit)
-        docs = await asyncio.to_thread(lambda: query.get())
-
-        if not docs:
-            if target_user:
-                return await message.answer(f"📭 На користувача <code>{target_user}</code> скарг немає.")
-            else:
-                return await message.answer("📭 Поки що немає жодної скарги.")
-
-        text = f"📋 <b>Останні скарги</b> (показано {len(docs)}):\n\n"
-        
-        for i, doc in enumerate(docs, 1):
-            d = doc.to_dict() or {}
-            reporter = d.get("reporter_id", "невідомо")
-            reported = d.get("reported_id", "невідомо")
-            reason = d.get("reason", "без причини")
-            
-            text += (
-                f"<b>{i}.</b> На <code>{reported}</code>\n"
-                f"   Причина: {reason}\n"
-                f"   Від: <code>{reporter}</code>\n\n"
-            )
-
-        await message.answer(text, parse_mode="HTML")
-
-        # Додаємо кнопки для бану по кожній скарзі
-        for doc in docs:
-            d = doc.to_dict() or {}
-            reported_id = d.get("reported_id")
-            reason = d.get("reason", "")
-            
-            if reported_id:
-                kb = types.InlineKeyboardMarkup(inline_keyboard=[
-                    [
-                        types.InlineKeyboardButton(
-                            text=f"🚫 Забанити {reported_id}", 
-                            callback_data=f"ban_report_{reported_id}"
-                        ),
-                        types.InlineKeyboardButton(
-                            text="✅ Пропустити", 
-                            callback_data="ignore_report"
-                        )
-                    ]
-                ])
-                await message.answer(
-                    f"⚡ Дія по скарзі на <code>{reported_id}</code>\nПричина: {reason}",
-                    parse_mode="HTML",
-                    reply_markup=kb
-                )
-
-    except Exception as e:
-        await message.answer(f"❌ Помилка при отриманні скарг: {e}")
-
-
-@dp.callback_query(F.data.startswith("ban_report_"))
-async def handle_ban_from_report(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ заборонено", show_alert=True)
-        return
-
-    reported_id = callback.data.split("_")[2]
-    
-    await callback.answer()
-    await callback.message.edit_text(
-        f"🚫 Баню користувача <code>{reported_id}</code>...",
-        parse_mode="HTML"
-    )
-    
-    await ban_user(reported_id, "Бан через панель скарг (адмін)")
-    
-    await callback.message.edit_text(
-        f"✅ Користувач <code>{reported_id}</code> забанений через скаргу.",
-        parse_mode="HTML"
-    )
-
-
-@dp.callback_query(F.data == "ignore_report")
-async def handle_ignore_report(callback: types.CallbackQuery):
-    await callback.answer("Пропущено")
-    await callback.message.edit_text("✅ Скарга пропущена (не забанили).")
-
-
-# =========================================================
-# ADMIN APPROVAL SYSTEM (окремий бот адміна)
-# =========================================================
-@dp.callback_query(F.data.startswith("approve_"))
-async def handle_approve(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ заборонено", show_alert=True)
-        return
-
-    user_id = callback.data.split("_")[1]
-    
-    try:
-        doc = await firebase_get(db.collection("users").document(user_id))
-        if doc and doc.exists:
-            data = doc.to_dict() or {}
-            await firebase_set(db.collection("users").document(user_id), {
-                **data,
-                "approved": True
-            })
-            
-            # Повідомляємо користувача
-            await safe_send_message(
-                user_id,
-                "✅ <b>Вітаємо!</b> Твою анкету схвалено!\n\n"
-                "Тепер ти можеш користуватися ботом і переглядати анкети.",
-                parse_mode="HTML",
-                reply_markup=get_main_menu()
-            )
-            
-            await callback.message.edit_text(
-                f"✅ Користувач <code>{user_id}</code> схвалений.",
-                parse_mode="HTML"
-            )
-    except Exception as e:
-        logging.error(f"Approve error: {e}")
-        await callback.answer("Помилка при схваленні", show_alert=True)
-
-
-@dp.callback_query(F.data.startswith("reject_"))
-async def handle_reject(callback: types.CallbackQuery):
-    if not is_admin(callback.from_user.id):
-        await callback.answer("❌ Доступ заборонено", show_alert=True)
-        return
-
-    user_id = callback.data.split("_")[1]
-    
-    try:
-        # Видаляємо анкету при відхиленні
-        await firebase_delete(db.collection("users").document(user_id))
-        
-        await safe_send_message(
-            user_id,
-            "❌ На жаль, твою анкету відхилено.\n\n"
-            "Якщо вважаєш, що це помилка — можеш спробувати зареєструватися знову через /start.",
-            parse_mode="HTML"
-        )
-        
-        await callback.message.edit_text(
-            f"❌ Користувач <code>{user_id}</code> відхилений і видалений.",
-            parse_mode="HTML"
-        )
-    except Exception as e:
-        logging.error(f"Reject error: {e}")
-        await callback.answer("Помилка при відхиленні", show_alert=True)
 # =========================================================
 # ASYNC MAIN RUNNER
 # =========================================================
