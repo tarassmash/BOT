@@ -33,6 +33,17 @@ DISCLAIMER_TEXT = (
     "Продовжуючи — ви підтверджуєте згоду."
 )
 COUNTRIES = ["Іспанія", "Польща", "Німеччина", "Чехія", "Італія"]
+
+# Причини скарг
+REPORT_REASONS = {
+    "fake": "🕵️ Фейк / Спам / Бот",
+    "explicit": "🔞 18+ / Оголе́не тіло",
+    "harassment": "😡 Образи / Домагання / Токсичність",
+    "scam": "💰 Шахрайство / Розвод",
+    "other": "❓ Інше порушення"
+}
+
+BAN_THRESHOLD = 5  # Після скількох скарг — автоматичний бан
 def calculate_distance(lat1, lon1, lat2, lon2):
     if None in (lat1, lon1, lat2, lon2):
         return 99999
@@ -247,6 +258,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
             referrer = args[0][4:]
         doc = await firebase_get(db.collection("users").document(user_id))
         if doc and doc.exists:
+            if await is_user_banned(user_id):
+                return await message.answer("🚫 Твоя анкета заблокована. Доступ до бота закрито.")
             await message.answer("❤️ З поверненням!", reply_markup=get_main_menu())
             return
         if referrer:
@@ -436,7 +449,11 @@ async def process_about(message: types.Message, state: FSMContext):
             "search_filters": {"country": None, "min_age": None, "max_age": None},
             "lat": None,
             "lon": None,
-            "disclaimer_seen": False
+            "disclaimer_seen": False,
+            "report_count": 0,
+            "banned": False,
+            "banned_at": None,
+            "ban_reason": None
         }
         await firebase_set(db.collection("users").document(user_id), profile)
         if referrer:
@@ -492,11 +509,87 @@ async def back_to_main_menu(message: types.Message, state: FSMContext):
     if current_state is not None:
         await state.clear()
     await message.answer("🏠 Головне меню", reply_markup=get_main_menu())
+
+# =========================================================
+# BAN SYSTEM HELPERS
+# =========================================================
+async def is_user_banned(user_id: str) -> bool:
+    """Перевіряє чи користувач забанений"""
+    try:
+        doc = await firebase_get(db.collection("users").document(user_id))
+        if doc and doc.exists:
+            data = doc.to_dict() or {}
+            return data.get("banned", False)
+    except Exception as e:
+        logging.error(f"Ban check error: {e}")
+    return False
+
+async def ban_user(user_id: str, reason: str = "Багато скарг від користувачів"):
+    """Банить користувача"""
+    try:
+        doc = await firebase_get(db.collection("users").document(user_id))
+        if doc and doc.exists:
+            data = doc.to_dict() or {}
+            await firebase_set(db.collection("users").document(user_id), {
+                **data,
+                "banned": True,
+                "banned_at": firestore.SERVER_TIMESTAMP,
+                "ban_reason": reason
+            })
+            await safe_send_message(user_id, 
+                "🚫 <b>Твою анкету заблоковано!</b>\n\n"
+                f"Причина: {reason}\n\n"
+                "Якщо вважаєш, що це помилка — напиши в підтримку (поки що через @username_support якщо є).",
+                parse_mode="HTML"
+            )
+            logging.info(f"User {user_id} banned. Reason: {reason}")
+    except Exception as e:
+        logging.error(f"Ban user error: {e}")
+
+async def increment_report_count(reported_id: str, reporter_id: str, reason_text: str):
+    """Збільшує лічильник скарг і перевіряє на бан"""
+    try:
+        doc = await firebase_get(db.collection("users").document(reported_id))
+        if not doc or not doc.exists:
+            return
+        
+        data = doc.to_dict() or {}
+        current_count = data.get("report_count", 0) + 1
+        
+        # Зберігаємо скаргу в окрему колекцію для історії
+        report_data = {
+            "reporter_id": reporter_id,
+            "reported_id": reported_id,
+            "reason": reason_text,
+            "timestamp": firestore.SERVER_TIMESTAMP
+        }
+        await firebase_set(
+            db.collection("reports").document(),
+            report_data
+        )
+        
+        # Оновлюємо лічильник у профілі
+        await firebase_set(db.collection("users").document(reported_id), {
+            **data,
+            "report_count": current_count
+        })
+        
+        # Авто-бан при досягненні порогу
+        if current_count >= BAN_THRESHOLD and not data.get("banned", False):
+            await ban_user(reported_id, f"Автоматичний бан: {current_count} скарг")
+            
+    except Exception as e:
+        logging.error(f"Increment report error: {e}")
+
 # =========================================================
 # ALGORITHMIC MATCHING ENGINE
 # =========================================================
 async def send_next_candidate(message: types.Message, user_id: str, filters: dict = None):
     try:
+        # Перевірка на бан
+        if await is_user_banned(user_id):
+            return await message.answer("🚫 Твоя анкета заблокована. Доступ до пошуку закрито.")
+        
         my_doc = await firebase_get(db.collection("users").document(user_id))
         if not my_doc or not my_doc.exists:
             return await message.answer("❌ Спочатку створи анкету через /start")
@@ -550,7 +643,10 @@ async def send_next_candidate(message: types.Message, user_id: str, filters: dic
                 types.InlineKeyboardButton(text="👎 Далі", callback_data="dislike")
             ],
             [
-                types.InlineKeyboardButton(text="⚙️ Змінити фільтри", callback_data="change_filters"),
+                types.InlineKeyboardButton(text="🚫 Поскаржитися", callback_data=f"report_{candidate['tg_id']}"),
+                types.InlineKeyboardButton(text="⚙️ Змінити фільтри", callback_data="change_filters")
+            ],
+            [
                 types.InlineKeyboardButton(text="💤 Завершити", callback_data="stop_search")
             ]
         ])
@@ -566,6 +662,8 @@ async def menu_search(message: types.Message, state: FSMContext):
     if await state.get_state() is not None:
         return await message.answer("⚠️ Спочатку заверши реєстрацію!")
     user_id = str(message.from_user.id)
+    if await is_user_banned(user_id):
+        return await message.answer("🚫 Твоя анкета заблокована. Доступ до пошуку закрито.")
     doc = await firebase_get(db.collection("users").document(user_id))
     if doc and doc.exists:
         data = doc.to_dict() or {}
@@ -580,6 +678,8 @@ async def menu_search_with_filters(message: types.Message, state: FSMContext):
     if await state.get_state() is not None:
         return await message.answer("⚠️ Спочатку заверши реєстрацію!")
     user_id = str(message.from_user.id)
+    if await is_user_banned(user_id):
+        return await message.answer("🚫 Твоя анкета заблокована. Доступ до пошуку закрито.")
     doc = await firebase_get(db.collection("users").document(user_id))
     if not doc or not doc.exists:
         return await message.answer("❌ Спочатку створи анкету через /start")
@@ -703,6 +803,8 @@ async def menu_profile(message: types.Message, state: FSMContext):
         return await message.answer("⚠️ Спочатку заверши реєстрацію!")
     try:
         user_id = str(message.from_user.id)
+        if await is_user_banned(user_id):
+            return await message.answer("🚫 Твоя анкета заблокована.")
         doc = await firebase_get(db.collection("users").document(user_id))
         if not doc or not doc.exists:
             return await message.answer("❌ Анкета не знайдена")
@@ -767,6 +869,8 @@ async def confirm_delete(callback: types.CallbackQuery):
 @dp.message(F.text == "👀 Хто мене лайкнув?")
 async def show_who_liked_me(message: types.Message):
     user_id = str(message.from_user.id)
+    if await is_user_banned(user_id):
+        return await message.answer("🚫 Твоя анкета заблокована. Доступ до функції закрито.")
     doc = await firebase_get(db.collection("users").document(user_id))
     if not doc or not doc.exists:
         return await message.answer("❌ Спочатку створи анкету через /start")
@@ -823,6 +927,83 @@ async def handle_like(callback: types.CallbackQuery):
         await send_next_candidate(callback.message, my_id)
     except Exception as e:
         logging.error(f"Error in handle_like: {e}")
+
+# =========================================================
+# REPORT / BAN SYSTEM
+# =========================================================
+@dp.callback_query(F.data.startswith("report_"))
+async def handle_report_start(callback: types.CallbackQuery):
+    """Показує меню з причинами скарги"""
+    try:
+        await callback.answer()
+        reported_id = callback.data.split("_")[1]
+        
+        # Створюємо клавіатуру з причинами
+        buttons = []
+        for code, text in REPORT_REASONS.items():
+            buttons.append([types.InlineKeyboardButton(
+                text=text, 
+                callback_data=f"reason_{reported_id}_{code}"
+            )])
+        
+        # Додаємо кнопку скасування
+        buttons.append([types.InlineKeyboardButton(text="❌ Скасувати", callback_data="report_cancel")])
+        
+        kb = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+        
+        await callback.message.edit_caption(
+            caption="🚫 <b>Обери причину скарги:</b>\n\n"
+                    "Твоя скарга допоможе зробити бот безпечнішим.\n"
+                    "Зловживання скаргами також карається.",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+    except Exception as e:
+        logging.error(f"Report start error: {e}")
+
+@dp.callback_query(F.data.startswith("reason_"))
+async def handle_report_reason(callback: types.CallbackQuery):
+    """Обробка вибраної причини скарги"""
+    try:
+        await callback.answer()
+        parts = callback.data.split("_")
+        reported_id = parts[1]
+        reason_code = parts[2]
+        
+        reporter_id = str(callback.from_user.id)
+        reason_text = REPORT_REASONS.get(reason_code, "Інше порушення")
+        
+        # Перевіряємо, чи не скаржиться користувач сам на себе
+        if reporter_id == reported_id:
+            await callback.message.edit_caption("❌ Не можна скаржитися на самого себе.")
+            await asyncio.sleep(1.5)
+            await callback.message.delete()
+            return await send_next_candidate(callback.message, reporter_id)
+        
+        # Зберігаємо скаргу + перевіряємо на бан
+        await increment_report_count(reported_id, reporter_id, reason_text)
+        
+        await callback.message.edit_caption(
+            caption="✅ <b>Дякуємо!</b> Скарга надіслана.\n\n"
+                    "Адміністрація розгляне її найближчим часом.\n"
+                    "Продовжуємо пошук...",
+            parse_mode="HTML"
+        )
+        await asyncio.sleep(1.2)
+        await callback.message.delete()
+        
+        # Показуємо наступну анкету
+        await send_next_candidate(callback.message, reporter_id)
+        
+    except Exception as e:
+        logging.error(f"Report reason error: {e}")
+
+@dp.callback_query(F.data == "report_cancel")
+async def handle_report_cancel(callback: types.CallbackQuery):
+    await callback.answer("Скасовано")
+    await callback.message.delete()
+    user_id = str(callback.from_user.id)
+    await send_next_candidate(callback.message, user_id)
 # =========================================================
 # ASYNC MAIN RUNNER
 # =========================================================
