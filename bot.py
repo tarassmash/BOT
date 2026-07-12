@@ -92,7 +92,7 @@ except Exception as e:
     db = None
 
 # Забираем токен из переменных окружения Railway (с фолбеком на твой текущий)
-TOKEN = os.getenv("BOT_TOKEN", "8731550935:AAF_XmQNZjBmtnhtQ-cIJ3gFvYswg-eDiZs")
+TOKEN = os.getenv("BOT_TOKEN", "8731550935:AAHac8rH08YAI1Bi707oxV56nVLv4Gt0v20")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
