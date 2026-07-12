@@ -3,7 +3,6 @@ import asyncio
 import random
 import time
 import math
-import traceback
 import os
 import json
 from aiogram import Bot, Dispatcher, types, F
@@ -19,7 +18,7 @@ from firebase_admin import credentials, firestore
 # =========================================================
 DISCLAIMER_TEXT = (
     "⚠️ <b>ЗНЯТТЯ ВІДПОВІДАЛЬНОСТІ — ВАЖЛИВО!</b>\n\n"
-    "Використовуючи кнопки <b>👍 Лайк</b>, <b>👎 Далі</b> та <b>💤 Завершити</b> "
+    "Використовуючи кнопки <b>👍 Лайк</b>, <b>👎 Далі</b>, <b>💤 Завершити</b> та <b>🚨 Скарга</b> "
     "для перегляду анкет, ви <b>повністю підтверджуєте та погоджуєтесь</b> з наступним:\n\n"
     "• Бот є лише технічною платформою для знайомств.\n"
     "• <b>Адміністрація бота НЕ несе жодної відповідальності</b> за:\n"
@@ -142,7 +141,8 @@ def get_leo_keyboard():
         [
             types.KeyboardButton(text="👍"),
             types.KeyboardButton(text="👎"),
-            types.KeyboardButton(text="💤")
+            types.KeyboardButton(text="💤"),
+            types.KeyboardButton(text="🚨")
         ]
     ]
     return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
@@ -539,7 +539,7 @@ async def send_next_candidate_leo(message: types.Message, state: FSMContext, use
         await state.clear()
         await message.answer("⚠️ Помилка завантаження анкети.", reply_markup=get_main_menu())
 
-@dp.message(LeoSearch.watching_profiles, F.text.in_(["👍", "👎", "💤"]))
+@dp.message(LeoSearch.watching_profiles, F.text.in_(["👍", "👎", "💤", "🚨"]))
 async def process_leo_action(message: types.Message, state: FSMContext):
     try:
         user_id = str(message.from_user.id)
@@ -552,6 +552,27 @@ async def process_leo_action(message: types.Message, state: FSMContext):
         if action == "💤":
             await state.clear()
             return await message.answer("💤 Пошук призупинено. Твоя анкета залишається в базі.", reply_markup=get_main_menu())
+
+        if action == "🚨":
+            if candidate_id:
+                report_data = {
+                    "reporter_id": user_id,
+                    "reported_user_id": candidate_id,
+                    "reason": "Підозрілий контент / Еротика / Порушення",
+                    "timestamp": firestore.SERVER_TIMESTAMP
+                }
+                await asyncio.to_thread(db.collection("reports").add, report_data)
+                
+                await message.answer(
+                    "🚨 <b>Скаргу прийнято.</b>\nМодератори перевірять цю анкету на порушення правил. Шукаємо далі...", 
+                    parse_mode="HTML"
+                )
+                
+                await firebase_set(
+                    db.collection("users").document(user_id).collection("seen").document(candidate_id), 
+                    {"ts": firestore.SERVER_TIMESTAMP}
+                )
+            return await send_next_candidate_leo(message, state, user_id)
 
         if action == "👎":
             if is_incoming:
