@@ -91,7 +91,6 @@ except Exception as e:
     print(f"❌ Firebase error: {e}")
     db = None
 
-# Забираем токен из переменных окружения Railway (с фолбеком на твой текущий)
 TOKEN = os.getenv("BOT_TOKEN", "8731550935:AAF_XmQNZjBmtnhtQ-cIJ3gFvYswg-eDiZs")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
@@ -115,6 +114,9 @@ class SearchFilters(StatesGroup):
     choosing_min_age = State()
     choosing_max_age = State()
 
+class LeoSearch(StatesGroup):
+    watching_profiles = State()
+
 # =========================================================
 # KEYBOARDS
 # =========================================================
@@ -132,6 +134,16 @@ def get_main_menu():
             types.KeyboardButton(text="📤 Запросити друга (Преміум 10 хв)")
         ],
         [types.KeyboardButton(text="📜 Політика конфіденційності")]
+    ]
+    return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
+
+def get_leo_keyboard():
+    kb = [
+        [
+            types.KeyboardButton(text="👍"),
+            types.KeyboardButton(text="👎"),
+            types.KeyboardButton(text="💤")
+        ]
     ]
     return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -426,32 +438,51 @@ async def skip_location(message: types.Message, state: FSMContext):
         await message.answer("📍 Надішли локацію або напиши «Пропустити»")
 
 # =========================================================
-# ALGORITHMIC MATCHING ENGINE
+# LEO (DAY VINCHIK) MATCHING ENGINE
 # =========================================================
-async def send_next_candidate(message: types.Message, user_id: str, filters: dict = None):
+async def send_next_candidate_leo(message: types.Message, state: FSMContext, user_id: str):
     try:
         my_doc = await firebase_get(db.collection("users").document(user_id))
         if not my_doc or not my_doc.exists:
             return await message.answer("❌ Спочатку створи анкету через /start")
 
-        my = my_doc.to_dict()
+        my = my_doc.to_dict() or {}
         my_age = my.get("age", 25)
         my_lat = my.get("lat")
         my_lon = my.get("lon")
+        
+        likes_docs = await asyncio.to_thread(
+            lambda: db.collection("users").document(user_id).collection("likes").limit(1).get()
+        )
+        
+        if likes_docs:
+            liker_id = likes_docs[0].id
+            liker_doc = await firebase_get(db.collection("users").document(liker_id))
+            if liker_doc and liker_doc.exists:
+                p = liker_doc.to_dict() or {}
+                text = f"❤️ <b>Ти сподобався(-лась) цьому користувачу!</b>\n\n👤 {p['name']}, {p['age']}\n🌍 {p['country']}\n\n📝 {p['about']}"
+                await state.update_data(current_candidate_id=liker_id, is_incoming_like=True)
+                await state.set_state(LeoSearch.watching_profiles)
+                return await safe_send_photo(
+                    message.chat.id, 
+                    p["photo"], 
+                    caption=text, 
+                    parse_mode="HTML", 
+                    reply_markup=get_leo_keyboard()
+                )
 
-        if filters is None:
-            filters = my.get("search_filters", {"country": None, "min_age": None, "max_age": None})
-
+        filters = my.get("search_filters", {"country": None, "min_age": None, "max_age": None})
         target_gender = "Я Жінка 👩" if "Дівчину" in my.get("search", "") else "Я Чоловік 👱‍♂️"
+        
         query = db.collection("users").where("gender", "==", target_gender)
-
+        
         country_filter = filters.get("country")
         if country_filter:
             query = query.where("country", "==", country_filter)
         else:
             query = query.where("country", "==", my.get("country"))
 
-        docs = await asyncio.to_thread(lambda: query.limit(300).get())
+        docs = await asyncio.to_thread(lambda: query.limit(200).get())
 
         candidates = []
         for doc in docs:
@@ -465,14 +496,16 @@ async def send_next_candidate(message: types.Message, user_id: str, filters: dic
                 candidates.append(data)
 
         if not candidates:
-            return await message.answer("😔 Анкет за твоїми фільтрами не знайдено.")
+            await state.clear()
+            return await message.answer("😔 Анкет за твоїми фільтрами не знайдено.", reply_markup=get_main_menu())
 
         seen_docs = await asyncio.to_thread(lambda: db.collection("users").document(user_id).collection("seen").get())
         seen_ids = {doc.id for doc in seen_docs}
         unseen = [c for c in candidates if c.get("tg_id") not in seen_ids]
 
         if not unseen:
-            return await message.answer("😔 Більше немає нових анкет за твоїми фільтрами.")
+            await state.clear()
+            return await message.answer("😔 Більше немає нових анкет. Спробуй змінити фільтри.", reply_markup=get_main_menu())
 
         def sort_key(c):
             dist = calculate_distance(my_lat, my_lon, c.get("lat"), c.get("lon"))
@@ -481,8 +514,12 @@ async def send_next_candidate(message: types.Message, user_id: str, filters: dic
 
         unseen.sort(key=sort_key)
         candidate = unseen[0]
+        candidate_id = candidate["tg_id"]
 
-        await firebase_set(db.collection("users").document(user_id).collection("seen").document(candidate["tg_id"]), {"ts": firestore.SERVER_TIMESTAMP})
+        await firebase_set(
+            db.collection("users").document(user_id).collection("seen").document(candidate_id), 
+            {"ts": firestore.SERVER_TIMESTAMP}
+        )
 
         dist_text = ""
         if my_lat and my_lon and candidate.get("lat") and candidate.get("lon"):
@@ -492,33 +529,89 @@ async def send_next_candidate(message: types.Message, user_id: str, filters: dic
 
         text = f"👤 {candidate['name']}, {candidate['age']}\n🌍 {candidate['country']}\n{dist_text}\n📝 {candidate['about']}"
 
-        kb = types.InlineKeyboardMarkup(inline_keyboard=[
-            [
-                types.InlineKeyboardButton(text="👍 Лайк", callback_data=f"like_{candidate['tg_id']}"),
-                types.InlineKeyboardButton(text="👎 Далі", callback_data="dislike")
-            ],
-            [
-                types.InlineKeyboardButton(text="⚙️ Змінити фільтри", callback_data="change_filters"),
-                types.InlineKeyboardButton(text="💤 Завершити", callback_data="stop_search")
-            ]
-        ])
+        await state.update_data(current_candidate_id=candidate_id, is_incoming_like=False)
+        await state.set_state(LeoSearch.watching_profiles)
 
-        await safe_send_photo(message.chat.id, candidate["photo"], caption=text, reply_markup=kb)
+        await safe_send_photo(message.chat.id, candidate["photo"], caption=text, reply_markup=get_leo_keyboard())
 
     except Exception as e:
-        logging.error(f"send_next_candidate error:\n{traceback.format_exc()}")
-        await message.answer("⚠️ Помилка при пошуку анкет.")
+        logging.error(f"Leo matching engine error: {e}")
+        await state.clear()
+        await message.answer("⚠️ Помилка завантаження анкети.", reply_markup=get_main_menu())
+
+@dp.message(LeoSearch.watching_profiles, F.text.in_(["👍", "👎", "💤"]))
+async def process_leo_action(message: types.Message, state: FSMContext):
+    try:
+        user_id = str(message.from_user.id)
+        state_data = await state.get_data()
+        candidate_id = state_data.get("current_candidate_id")
+        is_incoming = state_data.get("is_incoming_like", False)
+        
+        action = message.text
+
+        if action == "💤":
+            await state.clear()
+            return await message.answer("💤 Пошук призупинено. Твоя анкета залишається в базі.", reply_markup=get_main_menu())
+
+        if action == "👎":
+            if is_incoming:
+                await firebase_delete(db.collection("users").document(user_id).collection("likes").document(candidate_id))
+            return await send_next_candidate_leo(message, state, user_id)
+
+        if action == "👍":
+            if is_incoming:
+                my_doc = await firebase_get(db.collection("users").document(user_id))
+                target_doc = await firebase_get(db.collection("users").document(candidate_id))
+                
+                if my_doc and target_doc:
+                    my_data = my_doc.to_dict() or {}
+                    target_data = target_doc.to_dict() or {}
+                    
+                    my_username = f"@{my_data.get('username')}" if my_data.get('username') else "Користувач (немає нікнейму)"
+                    target_username = f"@{target_data.get('username')}" if target_data.get('username') else "Користувач (немає нікнейму)"
+                    
+                    await message.answer(
+                        f"🎉 <b>У вас взаємна симпатія з {target_data.get('name')}!</b>\n\n"
+                        f"Починай спілкування: {target_username}", 
+                        parse_mode="HTML"
+                    )
+                    await safe_send_message(
+                        candidate_id,
+                        f"🎉 <b>У вас взаємна симпатія з {my_data.get('name')}!</b>\n\n"
+                        f"Посилання на чат: {my_username}",
+                        parse_mode="HTML"
+                    )
+                
+                await firebase_delete(db.collection("users").document(user_id).collection("likes").document(candidate_id))
+            
+            else:
+                await firebase_set(
+                    db.collection("users").document(candidate_id).collection("likes").document(user_id),
+                    {"ts": firestore.SERVER_TIMESTAMP}
+                )
+                await safe_send_message(
+                    candidate_id, 
+                    "❤️ Хтось зацікавився твоєю анкетою! Натисни «1. Дивитися анкети 👥», щоб дізнатися хто це."
+                )
+
+            return await send_next_candidate_leo(message, state, user_id)
+
+    except Exception as e:
+        logging.error(f"Error processing Leo action: {e}")
+        await send_next_candidate_leo(message, state, str(message.from_user.id))
 
 # =========================================================
 # MAIN MENU HANDLERS
 # =========================================================
 @dp.message(F.text == "1. Дивитися анкети 👥")
-async def menu_search(message: types.Message, state: FSMContext):
-    if await state.get_state() is not None:
+async def menu_search_leo_style(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is not None and "Registration" in current_state:
         return await message.answer("⚠️ Спочатку заверши реєстрацію!")
-
+            
     user_id = str(message.from_user.id)
     doc = await firebase_get(db.collection("users").document(user_id))
+    
     if doc and doc.exists:
         data = doc.to_dict() or {}
         if not data.get("disclaimer_seen"):
@@ -526,8 +619,8 @@ async def menu_search(message: types.Message, state: FSMContext):
             await firebase_set(db.collection("users").document(user_id), {**data, "disclaimer_seen": True})
             await asyncio.sleep(0.8)
 
-    await message.answer("🔍 Шукаю анкети (відсортовані за відстанню)...")
-    await send_next_candidate(message, user_id)
+    await message.answer("🔄 Завантажую стрічку анкет...")
+    await send_next_candidate_leo(message, state, user_id)
 
 @dp.message(F.text == "🔍 Пошук з фільтрами ⚙️")
 async def menu_search_with_filters(message: types.Message, state: FSMContext):
@@ -545,7 +638,7 @@ async def menu_search_with_filters(message: types.Message, state: FSMContext):
     await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
 # =========================================================
-# CALLBACK INLINE QUERIES
+# CALLBACK INLINE QUERIES (FILTERS ONLY)
 # =========================================================
 @dp.callback_query(F.data == "filter_change_country")
 async def filter_change_country(callback: types.CallbackQuery, state: FSMContext):
@@ -573,7 +666,7 @@ async def process_filter_country(message: types.Message, state: FSMContext):
 async def filter_change_age(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.delete()
-    await callback.message.answer("🎂 Введи мінімальний вік:")
+    await callback.message.answer("🎂 Введи мінімальний вік:", reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(SearchFilters.choosing_min_age)
 
 @dp.message(SearchFilters.choosing_min_age)
@@ -606,12 +699,12 @@ async def process_max_age(message: types.Message, state: FSMContext):
     await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
 @dp.callback_query(F.data == "filter_start_search")
-async def filter_start_search(callback: types.CallbackQuery):
+async def filter_start_search(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.delete()
     user_id = str(callback.from_user.id)
     await callback.message.answer("🔍 Починаю пошук за фільтрами (з урахуванням відстані)...")
-    await send_next_candidate(callback.message, user_id)
+    await send_next_candidate_leo(callback.message, state, user_id)
 
 @dp.callback_query(F.data == "filter_reset")
 async def filter_reset(callback: types.CallbackQuery):
@@ -630,34 +723,10 @@ async def filter_close(callback: types.CallbackQuery):
     await callback.answer()
     await callback.message.delete()
 
-@dp.callback_query(F.data == "change_filters")
-async def change_filters_during_search(callback: types.CallbackQuery, state: FSMContext):
-    await callback.answer()
-    await callback.message.delete()
-    user_id = str(callback.from_user.id)
-    doc = await firebase_get(db.collection("users").document(user_id))
-    current_filters = (doc.to_dict() or {}).get("search_filters", {}) if doc else {}
-    text, kb = get_filters_inline_keyboard(current_filters)
-    await callback.message.answer(text, parse_mode="HTML", reply_markup=kb)
-
-@dp.callback_query(F.data == "dislike")
-async def handle_dislike(callback: types.CallbackQuery):
-    await callback.answer()
-    await callback.message.delete()
-    user_id = str(callback.from_user.id)
-    await send_next_candidate(callback.message, user_id)
-
-@dp.callback_query(F.data == "stop_search")
-async def handle_stop_search(callback: types.CallbackQuery):
-    await callback.answer()
-    await callback.message.delete()
-    await callback.message.answer("💤 Пошук завершено. Ти завжди можеш повернутися через меню.", reply_markup=get_main_menu())
-
 # =========================================================
 # OTHER SYSTEM HANDLERS
 # =========================================================
-@dp.message(F.text == "2. Моя анкету 📝")
-@dp.message(F.text == "2. Моя анкета 📝")
+@dp.message(F.text.in_(["2. Моя анкету 📝", "2. Моя анкета 📝"]))
 async def menu_profile(message: types.Message, state: FSMContext):
     if await state.get_state() is not None:
         return await message.answer("⚠️ Спочатку заверши реєстрацію!")
@@ -710,7 +779,6 @@ async def confirm_delete(callback: types.CallbackQuery):
     user_id = str(callback.from_user.id)
     ref = db.collection("users").document(user_id)
     
-    # Очищаем подколлекции перед удалением основного документа
     try:
         seen_docs = await asyncio.to_thread(lambda: ref.collection("seen").get())
         for doc in seen_docs: await firebase_delete(doc.reference)
@@ -720,82 +788,90 @@ async def confirm_delete(callback: types.CallbackQuery):
         logging.error(f"Subcollection cleanup error: {e}")
         
     await firebase_delete(ref)
-    await callback.message.answer("❌ Твоя анкета повністю видалена з бази даних. Натисни /start, щоб зареєструватися знову.")
+    await callback.message.answer("❌ Твоя анкета повністю видалена з бази даних. Натисни /start, щоб зареєструватися знову.", reply_markup=types.ReplyKeyboardRemove())
 
 @dp.message(F.text == "👀 Хто мене лайкнув?")
 async def show_who_liked_me(message: types.Message):
-    user_id = str(message.from_user.id)
-    doc = await firebase_get(db.collection("users").document(user_id))
-    if not doc or not doc.exists:
-        return await message.answer("❌ Спочатку створи анкету через /start")
-    data = doc.to_dict() or {}
-    if time.time() > data.get("likes_view_until", 0):
-        return await message.answer("🔒 Доступ закритий. Запроси друга за допомогою кнопки нижче, щоб відкрити доступ на 10 хвилин!")
-    likes_docs = await asyncio.to_thread(lambda: db.collection("users").document(user_id).collection("likes").get())
-    if not likes_docs:
-        return await message.answer("😔 Поки що тебе ніхто не лайкнув.")
-    text = "❤️ Тебе лайкнули:\n\n"
-    for like_doc in likes_docs:
-        liker_id = like_doc.id
-        liker_doc = await firebase_get(db.collection("users").document(liker_id))
-        if liker_doc and liker_doc.exists:
-            l = liker_doc.to_dict()
-            text += f"👤 {l.get('name')}, {l.get('age')} — @{l.get('username','')}\n"
-    await message.answer(text)
+    try:
+        user_id = str(message.from_user.id)
+        doc = await firebase_get(db.collection("users").document(user_id))
+        
+        if not doc or not doc.exists:
+            return await message.answer("❌ Спочатку створи анкету через /start")
+            
+        data = doc.to_dict() or {}
+        likes_view_until = data.get("likes_view_until", 0)
+        
+        if time.time() > likes_view_until:
+            bot_info = await bot.get_me()
+            ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+            
+            text = (
+                "🔒 <b>Ця функція доступна лише з Преміум-доступом!</b>\n\n"
+                "Отримати його дуже просто та безкоштовно. "
+                "Поділися цим посиланням із другом. Як тільки він зареєструється — "
+                "ти отримаєш повний доступ до перегляду лайків на 10 хвилин!\n\n"
+                f"🔗 <b>Твоє посилання:</b>\n<code>{ref_link}</code>"
+            )
+            return await message.answer(text, parse_mode="HTML")
+            
+        likes_docs = await asyncio.to_thread(
+            lambda: db.collection("users").document(user_id).collection("likes").limit(10).get()
+        )
+        
+        if not likes_docs:
+            return await message.answer("😔 Тебе поки ніхто не лайкнув. Оновлюй анкету або чекай на нові знайомства!")
+            
+        await message.answer("💎 <b>Ось люди, яким ти сподобався(-лась)</b> (перейди в 1. Дивитися анкети, щоб відповісти взаємністю):")
+        
+        for doc in likes_docs:
+            liker_id = doc.id
+            liker_doc = await firebase_get(db.collection("users").document(liker_id))
+            
+            if liker_doc and liker_doc.exists:
+                p = liker_doc.to_dict() or {}
+                text = f"👤 {p['name']}, {p['age']}\n🌍 {p['country']}\n\n📝 {p['about']}"
+                
+                await safe_send_photo(message.chat.id, p["photo"], caption=text)
+                await asyncio.sleep(0.3)
+                
+    except Exception as e:
+        logging.error(f"Show who liked me error: {e}")
+        await message.answer("⚠️ Помилка завантаження списку лайків.")
 
 @dp.message(F.text == "📤 Запросити друга (Преміум 10 хв)")
-async def invite_friend(message: types.Message):
-    bot_info = await bot.get_me()
+async def menu_invite_friend(message: types.Message):
     user_id = str(message.from_user.id)
-    link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
-    await message.answer(f"📤 Поділись посиланням:\n\n<code>{link}</code>", parse_mode="HTML")
+    bot_info = await bot.get_me()
+    ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
+    
+    text = (
+        "💎 <b>Отримай 10 хвилин Преміум-доступу!</b>\n\n"
+        "Скопіюй посилання нижче та надішли його другу/подрузі. "
+        "Після їхньої реєстрації ти миттєво зможеш дізнатися, хто поставив тобі лайк.\n\n"
+        f"🔗 <b>Твоє реферальне посилання:</b>\n<code>{ref_link}</code>"
+    )
+    await message.answer(text, parse_mode="HTML")
 
 @dp.message(F.text == "📜 Політика конфіденційності")
-async def show_privacy_policy(message: types.Message):
-    await message.answer(DISCLAIMER_TEXT, parse_mode="HTML")
+async def menu_privacy(message: types.Message):
+    text = (
+        "📜 <b>Політика конфіденційності та правила користування</b>\n\n"
+        "1. Бот обробляє ваші дані (ім'я, вік, країну, фото, локацію) виключно з метою забезпечення пошуку анкет.\n"
+        "2. Ваша точна локація ніколи не передається іншим користувачам у відкритому вигляді — бот вираховує лише приблизну відстань у кілометрах.\n"
+        "3. Ви маєте право у будь-який момент видалити свою анкету за допомогою кнопки «Видалити анкету ❌» — після цього всі ваші дані стираються назавжди."
+    )
+    await message.answer(text, parse_mode="HTML")
 
 # =========================================================
-# LIKE ENGINE & MATCH DETECTION
-# =========================================================
-@dp.callback_query(F.data.startswith("like_"))
-async def handle_like(callback: types.CallbackQuery):
-    try:
-        await callback.answer()
-        await callback.message.delete()
-        
-        my_id = str(callback.from_user.id)
-        target_id = callback.data.split("_")[1]
-        
-        await firebase_set(db.collection("users").document(my_id).collection("likes").document(target_id), {"ts": firestore.SERVER_TIMESTAMP})
-        reverse = await firebase_get(db.collection("users").document(target_id).collection("likes").document(my_id))
-        
-        if reverse and reverse.exists:
-            me_doc = await firebase_get(db.collection("users").document(my_id))
-            them_doc = await firebase_get(db.collection("users").document(target_id))
-            me = me_doc.to_dict() if me_doc else {}
-            them = them_doc.to_dict() if them_doc else {}
-            
-            await safe_send_message(my_id, f"🎉 <b>МЕТЧ!</b> Пиши @{them.get('username', '')}", parse_mode="HTML")
-            await safe_send_message(target_id, f"🎉 <b>МЕТЧ!</b> Пиши @{me.get('username', '')}", parse_mode="HTML")
-            
-        await send_next_candidate(callback.message, my_id)
-    except Exception as e:
-        logging.error(f"Error in handle_like: {e}")
-
-# =========================================================
-# ASYNC MAIN RUNNER
+# POOLING & RUN
 # =========================================================
 async def main():
-    if db is not None:
-        asyncio.create_task(internet_watcher())
-        asyncio.create_task(firebase_watcher())
-        print("🚀 Бот запущен в режиме Long Polling!")
-        await dp.start_polling(bot)
-    else:
-        logging.critical("Критическая ошибка: Firebase не подключен! Запуск невозможен.")
+    asyncio.create_task(internet_watcher())
+    asyncio.create_task(firebase_watcher())
+    
+    print("🚀 Бот запускається...")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logging.info("Бот остановлен.")
+    asyncio.run(main())
