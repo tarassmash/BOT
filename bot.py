@@ -1,9 +1,9 @@
-
 import logging
 import asyncio
 import random
 import time
 import math
+import traceback
 import os
 import json
 from aiogram import Bot, Dispatcher, types, F
@@ -137,7 +137,6 @@ def get_main_menu():
     ]
     return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
-# ЗБЕРЕЖЕНО СТАРУ ФУНКЦІЮ (не видалено)
 def get_leo_keyboard():
     kb = [
         [
@@ -145,20 +144,6 @@ def get_leo_keyboard():
             types.KeyboardButton(text="👎"),
             types.KeyboardButton(text="💤"),
             types.KeyboardButton(text="🚨")
-        ]
-    ]
-    return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
-
-# НОВА ДОДАНА ФУНКЦІЯ (як у топових ботах)
-def get_leo_keyboard_v2():
-    kb = [
-        [
-            types.KeyboardButton(text="👍"),
-            types.KeyboardButton(text="👎"),
-            types.KeyboardButton(text="💤")
-        ],
-        [
-            types.KeyboardButton(text="🚨 Скарга на анкету")
         ]
     ]
     return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
@@ -479,13 +464,12 @@ async def send_next_candidate_leo(message: types.Message, state: FSMContext, use
                 text = f"❤️ <b>Ти сподобався(-лась) цьому користувачу!</b>\n\n👤 {p['name']}, {p['age']}\n🌍 {p['country']}\n\n📝 {p['about']}"
                 await state.update_data(current_candidate_id=liker_id, is_incoming_like=True)
                 await state.set_state(LeoSearch.watching_profiles)
-                # Використовуємо нову клавіатуру V2
                 return await safe_send_photo(
                     message.chat.id, 
                     p["photo"], 
                     caption=text, 
                     parse_mode="HTML", 
-                    reply_markup=get_leo_keyboard_v2()
+                    reply_markup=get_leo_keyboard()
                 )
 
         filters = my.get("search_filters", {"country": None, "min_age": None, "max_age": None})
@@ -549,16 +533,14 @@ async def send_next_candidate_leo(message: types.Message, state: FSMContext, use
         await state.update_data(current_candidate_id=candidate_id, is_incoming_like=False)
         await state.set_state(LeoSearch.watching_profiles)
 
-        # Використовуємо нову клавіатуру V2
-        await safe_send_photo(message.chat.id, candidate["photo"], caption=text, reply_markup=get_leo_keyboard_v2())
+        await safe_send_photo(message.chat.id, candidate["photo"], caption=text, reply_markup=get_leo_keyboard())
 
     except Exception as e:
         logging.error(f"Leo matching engine error: {e}")
         await state.clear()
         await message.answer("⚠️ Помилка завантаження анкети.", reply_markup=get_main_menu())
 
-# ДОДАНО НОВУ КНОПКУ ДО ОБРОБНИКА
-@dp.message(LeoSearch.watching_profiles, F.text.in_(["👍", "👎", "💤", "🚨", "🚨 Скарга на анкету"]))
+@dp.message(LeoSearch.watching_profiles, F.text.in_(["👍", "👎", "💤", "🚨"]))
 async def process_leo_action(message: types.Message, state: FSMContext):
     try:
         user_id = str(message.from_user.id)
@@ -572,7 +554,7 @@ async def process_leo_action(message: types.Message, state: FSMContext):
             await state.clear()
             return await message.answer("💤 Пошук призупинено. Твоя анкета залишається в базі.", reply_markup=get_main_menu())
 
-        if action in ["🚨", "🚨 Скарга на анкету"]:
+        if action == "🚨":
             if candidate_id:
                 report_data = {
                     "reporter_id": user_id,
