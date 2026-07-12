@@ -57,7 +57,7 @@ except Exception as e:
 # =========================================================
 # BOT
 # =========================================================
-TOKEN = "8731550935:AAF_XmQNZjBmtnhtQ-cIJ3gFvYswg-eDiZs"
+TOKEN = "8731550935:AAHac8rH08YAI1Bi707oxV56nVLv4Gt0v20"
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 # =========================================================
