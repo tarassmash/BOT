@@ -93,10 +93,12 @@ except Exception as e:
     print(f"❌ Firebase error: {e}")
     db = None
 
-# токен только из Railway → Variables → BOT_TOKEN (в коде его быть не должно)
-TOKEN = os.getenv("BOT_TOKEN", "").strip()
-if not TOKEN:
-    raise SystemExit("❌ Не задано BOT_TOKEN у Railway → Variables")
+# токен має бути лише в Railway → Variables → BOT_TOKEN.
+# Старий токен лежить у публічному репозиторії: відкличте його в @BotFather (/revoke) і задайте новий у BOT_TOKEN.
+LEGACY_TOKEN = "8731550935:AAF_XmQNZjBmtnhtQ-cIJ3gFvYswg-eDiZs"
+TOKEN = os.getenv("BOT_TOKEN", "").strip() or LEGACY_TOKEN
+if TOKEN == LEGACY_TOKEN:
+    logging.warning("⚠️ BOT_TOKEN не задано — використовується старий токен з коду. Він публічний: відкличте його в @BotFather і задайте новий у Railway → Variables → BOT_TOKEN.")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
 
