@@ -11,8 +11,10 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, TelegramForbiddenError
+from aiogram import BaseMiddleware
 import firebase_admin
 from firebase_admin import credentials, firestore
+from admin import Ctx, start_admin
 
 # =========================================================
 # DISCLAIMER & CONFIG
@@ -91,9 +93,97 @@ except Exception as e:
     print(f"❌ Firebase error: {e}")
     db = None
 
-TOKEN = os.getenv("BOT_TOKEN", "8731550935:AAF_XmQNZjBmtnhtQ-cIJ3gFvYswg-eDiZs")
+# токен только из Railway → Variables → BOT_TOKEN (в коде его быть не должно)
+TOKEN = os.getenv("BOT_TOKEN", "").strip()
+if not TOKEN:
+    raise SystemExit("❌ Не задано BOT_TOKEN у Railway → Variables")
 bot = Bot(token=TOKEN)
 dp = Dispatcher()
+
+# =========================================================
+# SETTINGS (редагуються в адмінці, зберігаються у Firestore system/settings)
+# =========================================================
+MIN_AGE = 18
+SETTINGS = {
+    "onboarding": ONBOARDING_TEXT,
+    "disclaimer": DISCLAIMER_TEXT,
+    "privacy": None,
+    "welcome_back": "❤️ З поверненням!",
+    "countries": list(COUNTRIES),
+    "premium_minutes": 10,
+    "report_hide": 3,
+    "admin_ids": [],
+}
+ENV_ADMINS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
+BANNED = set()
+
+def admin_ids():
+    return ENV_ADMINS | {str(x) for x in SETTINGS.get("admin_ids") or []}
+
+def countries():
+    return SETTINGS.get("countries") or COUNTRIES
+
+def premium_minutes():
+    return int(SETTINGS.get("premium_minutes") or 10)
+
+async def load_settings():
+    if not db:
+        return
+    doc = await firebase_get(db.collection("system").document("settings"))
+    if doc and doc.exists:
+        for k, v in (doc.to_dict() or {}).items():
+            if k in SETTINGS and v not in (None, "", []):
+                SETTINGS[k] = v
+
+async def save_settings(new):
+    SETTINGS.update(new)
+    await firebase_set(db.collection("system").document("settings"), SETTINGS)
+
+async def load_banned():
+    docs = await asyncio.to_thread(lambda: list(db.collection("users").where("banned", "==", True).stream()))
+    BANNED.clear()
+    BANNED.update(d.id for d in docs)
+
+def on_ban(uid, banned):
+    (BANNED.add if banned else BANNED.discard)(str(uid))
+
+async def settings_watcher():
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await load_settings()
+            await load_banned()
+        except Exception as e:
+            logging.error(f"settings reload: {e}")
+
+# заблоковані не можуть користуватися ботом; фіксуємо, коли людина була активна (раз на 10 хв)
+_last_touch = {}
+
+class GuardMiddleware(BaseMiddleware):
+    async def __call__(self, handler, event, data):
+        user = data.get("event_from_user")
+        if user:
+            uid = str(user.id)
+            if uid in BANNED:
+                if isinstance(event, types.Message):
+                    await event.answer("⛔️ Ваш акаунт заблоковано адміністрацією.")
+                elif isinstance(event, types.CallbackQuery):
+                    await event.answer("⛔️ Акаунт заблоковано", show_alert=True)
+                return
+            now = time.time()
+            if db and now - _last_touch.get(uid, 0) > 600:
+                _last_touch[uid] = now
+                asyncio.create_task(touch(uid))
+        return await handler(event, data)
+
+async def touch(uid):
+    try:
+        await asyncio.to_thread(db.collection("users").document(uid).update, {"last_active": firestore.SERVER_TIMESTAMP, "blocked_bot": False})
+    except Exception:
+        pass  # ще не зареєстрований
+
+dp.message.outer_middleware(GuardMiddleware())
+dp.callback_query.outer_middleware(GuardMiddleware())
 
 # =========================================================
 # STATES
@@ -131,7 +221,7 @@ def get_main_menu():
         ],
         [
             types.KeyboardButton(text="👀 Хто мене лайкнув?"),
-            types.KeyboardButton(text="📤 Запросити друга (Преміум 10 хв)")
+            types.KeyboardButton(text=f"📤 Запросити друга (Преміум {premium_minutes()} хв)")
         ],
         [types.KeyboardButton(text="📜 Політика конфіденційності")]
     ]
@@ -267,7 +357,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
         doc = await firebase_get(db.collection("users").document(user_id))
         if doc and doc.exists:
-            await message.answer("❤️ З поверненням!", reply_markup=get_main_menu())
+            await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())
             return
 
         if referrer:
@@ -296,7 +386,7 @@ async def process_captcha(message: types.Message, state: FSMContext):
         await message.answer("✅ Перевірку пройдено!")
         await asyncio.sleep(1)
         
-        await message.answer(ONBOARDING_TEXT, parse_mode="HTML")
+        await message.answer(SETTINGS["onboarding"], parse_mode="HTML")
         await asyncio.sleep(1.5)
         
         await message.answer("👋 Як тебе звати?")
@@ -322,10 +412,10 @@ async def process_age(message: types.Message, state: FSMContext):
         if not message.text.isdigit():
             return await message.answer("❌ Введи число")
         age = int(message.text)
-        if age < 16 or age > 70:
-            return await message.answer("❌ Вік 16-70")
+        if age < MIN_AGE or age > 70:
+            return await message.answer(f"❌ Бот лише для дорослих: вік від {MIN_AGE} до 70")
         await state.update_data(age=age)
-        kb = [[types.KeyboardButton(text=c)] for c in COUNTRIES]
+        kb = [[types.KeyboardButton(text=c)] for c in countries()]
         await message.answer("🌍 Де ти зараз?", reply_markup=types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, one_time_keyboard=True))
         await state.set_state(Registration.waiting_for_country)
     except Exception as e:
@@ -392,17 +482,19 @@ async def process_about(message: types.Message, state: FSMContext):
             "registered_at": firestore.SERVER_TIMESTAMP,
             "search_filters": {"country": None, "min_age": None, "max_age": None},
             "lat": None,
-            "lon": None
+            "lon": None,
+            "last_active": firestore.SERVER_TIMESTAMP,
+            "referred_by": referrer if referrer and referrer != user_id else ""
         }
         await firebase_set(db.collection("users").document(user_id), profile)
 
-        if referrer:
-            unlock_time = int(time.time()) + 600
+        if referrer and referrer != user_id:
+            unlock_time = int(time.time()) + premium_minutes() * 60
             ref_doc = await firebase_get(db.collection("users").document(referrer))
             if ref_doc and ref_doc.exists:
                 ref_data = ref_doc.to_dict() or {}
                 await firebase_set(db.collection("users").document(referrer), {**ref_data, "likes_view_until": unlock_time})
-                await safe_send_message(referrer, "🎉 Твій друг завершив реєстрацію! Ти отримав доступ до «Хто мене лайкнув?» на 10 хвилин!")
+                await safe_send_message(referrer, f"🎉 Твій друг завершив реєстрацію! Ти отримав доступ до «Хто мене лайкнув?» на {premium_minutes()} хвилин!")
 
         await state.clear()
         await message.answer(
@@ -453,24 +545,29 @@ async def send_next_candidate_leo(message: types.Message, state: FSMContext, use
         my_lon = my.get("lon")
         
         likes_docs = await asyncio.to_thread(
-            lambda: db.collection("users").document(user_id).collection("likes").limit(1).get()
+            lambda: db.collection("users").document(user_id).collection("likes").limit(5).get()
         )
         
-        if likes_docs:
-            liker_id = likes_docs[0].id
+        for like in likes_docs:
+            liker_id = like.id
             liker_doc = await firebase_get(db.collection("users").document(liker_id))
-            if liker_doc and liker_doc.exists:
-                p = liker_doc.to_dict() or {}
-                text = f"❤️ <b>Ти сподобався(-лась) цьому користувачу!</b>\n\n👤 {p['name']}, {p['age']}\n🌍 {p['country']}\n\n📝 {p['about']}"
-                await state.update_data(current_candidate_id=liker_id, is_incoming_like=True)
-                await state.set_state(LeoSearch.watching_profiles)
-                return await safe_send_photo(
-                    message.chat.id, 
-                    p["photo"], 
-                    caption=text, 
-                    parse_mode="HTML", 
-                    reply_markup=get_leo_keyboard()
-                )
+            p = (liker_doc.to_dict() or {}) if liker_doc and liker_doc.exists else None
+            # анкету видалено або заблоковано — прибираємо лайк, щоб він не застрягав
+            if not p or p.get("banned") or "photo" not in p:
+                await firebase_delete(like.reference)
+                continue
+            if p.get("hidden"):
+                continue  # на перевірці після скарг — не показуємо, але лайк лишаємо
+            text = f"❤️ <b>Ти сподобався(-лась) цьому користувачу!</b>\n\n👤 {p['name']}, {p['age']}\n🌍 {p['country']}\n\n📝 {p['about']}"
+            await state.update_data(current_candidate_id=liker_id, is_incoming_like=True)
+            await state.set_state(LeoSearch.watching_profiles)
+            return await safe_send_photo(
+                message.chat.id, 
+                p["photo"], 
+                caption=text, 
+                parse_mode="HTML", 
+                reply_markup=get_leo_keyboard()
+            )
 
         filters = my.get("search_filters", {"country": None, "min_age": None, "max_age": None})
         target_gender = "Я Жінка 👩" if "Дівчину" in my.get("search", "") else "Я Чоловік 👱‍♂️"
@@ -488,7 +585,7 @@ async def send_next_candidate_leo(message: types.Message, state: FSMContext, use
         candidates = []
         for doc in docs:
             data = doc.to_dict()
-            if data and doc.id != user_id and "photo" in data and "age" in data:
+            if data and doc.id != user_id and "photo" in data and "age" in data and not data.get("banned") and not data.get("hidden"):
                 age = data["age"]
                 min_age = filters.get("min_age")
                 max_age = filters.get("max_age")
@@ -560,9 +657,11 @@ async def process_leo_action(message: types.Message, state: FSMContext):
                     "reporter_id": user_id,
                     "reported_user_id": candidate_id,
                     "reason": "Підозрілий контент / Еротика / Порушення",
-                    "timestamp": firestore.SERVER_TIMESTAMP
+                    "timestamp": firestore.SERVER_TIMESTAMP,
+                    "status": "new"
                 }
                 await asyncio.to_thread(db.collection("reports").add, report_data)
+                asyncio.create_task(after_report(candidate_id, user_id))
                 
                 await message.answer(
                     "🚨 <b>Скаргу прийнято.</b>\nМодератори перевірять цю анкету на порушення правил. Шукаємо далі...", 
@@ -597,6 +696,10 @@ async def process_leo_action(message: types.Message, state: FSMContext):
                         f"Починай спілкування: {target_username}", 
                         parse_mode="HTML"
                     )
+                    try:
+                        await asyncio.to_thread(db.collection("matches").add, {"a": user_id, "b": candidate_id, "ts": firestore.SERVER_TIMESTAMP})
+                    except Exception as e:
+                        logging.error(f"match log: {e}")
                     await safe_send_message(
                         candidate_id,
                         f"🎉 <b>У вас взаємна симпатія з {my_data.get('name')}!</b>\n\n"
@@ -637,7 +740,7 @@ async def menu_search_leo_style(message: types.Message, state: FSMContext):
     if doc and doc.exists:
         data = doc.to_dict() or {}
         if not data.get("disclaimer_seen"):
-            await message.answer(DISCLAIMER_TEXT, parse_mode="HTML")
+            await message.answer(SETTINGS["disclaimer"], parse_mode="HTML")
             await firebase_set(db.collection("users").document(user_id), {**data, "disclaimer_seen": True})
             await asyncio.sleep(0.8)
 
@@ -666,7 +769,7 @@ async def menu_search_with_filters(message: types.Message, state: FSMContext):
 async def filter_change_country(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await callback.message.delete()
-    kb = [[types.KeyboardButton(text=c)] for c in COUNTRIES] + [[types.KeyboardButton(text="Будь-яка країна")]]
+    kb = [[types.KeyboardButton(text=c)] for c in countries()] + [[types.KeyboardButton(text="Будь-яка країна")]]
     await callback.message.answer("🌍 Обери країну:", reply_markup=types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, one_time_keyboard=True))
     await state.set_state(SearchFilters.choosing_country)
 
@@ -832,7 +935,7 @@ async def show_who_liked_me(message: types.Message):
                 "🔒 <b>Ця функція доступна лише з Преміум-доступом!</b>\n\n"
                 "Отримати його дуже просто та безкоштовно. "
                 "Поділися цим посиланням із другом. Як тільки він зареєструється — "
-                "ти отримаєш повний доступ до перегляду лайків на 10 хвилин!\n\n"
+                f"ти отримаєш повний доступ до перегляду лайків на {premium_minutes()} хвилин!\n\n"
                 f"🔗 <b>Твоє посилання:</b>\n<code>{ref_link}</code>"
             )
             return await message.answer(text, parse_mode="HTML")
@@ -861,14 +964,14 @@ async def show_who_liked_me(message: types.Message):
         logging.error(f"Show who liked me error: {e}")
         await message.answer("⚠️ Помилка завантаження списку лайків.")
 
-@dp.message(F.text == "📤 Запросити друга (Преміум 10 хв)")
+@dp.message(F.text.startswith("📤 Запросити друга"))
 async def menu_invite_friend(message: types.Message):
     user_id = str(message.from_user.id)
     bot_info = await bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
     
     text = (
-        "💎 <b>Отримай 10 хвилин Преміум-доступу!</b>\n\n"
+        f"💎 <b>Отримай {premium_minutes()} хвилин Преміум-доступу!</b>\n\n"
         "Скопіюй посилання нижче та надішли його другу/подрузі. "
         "Після їхньої реєстрації ти миттєво зможеш дізнатися, хто поставив тобі лайк.\n\n"
         f"🔗 <b>Твоє реферальне посилання:</b>\n<code>{ref_link}</code>"
@@ -877,6 +980,8 @@ async def menu_invite_friend(message: types.Message):
 
 @dp.message(F.text == "📜 Політика конфіденційності")
 async def menu_privacy(message: types.Message):
+    if SETTINGS.get("privacy"):
+        return await message.answer(SETTINGS["privacy"], parse_mode="HTML")
     text = (
         "📜 <b>Політика конфіденційності та правила користування</b>\n\n"
         "1. Бот обробляє ваші дані (ім'я, вік, країну, фото, локацію) виключно з метою забезпечення пошуку анкет.\n"
@@ -886,11 +991,103 @@ async def menu_privacy(message: types.Message):
     await message.answer(text, parse_mode="HTML")
 
 # =========================================================
+# ADMIN: скарги в Telegram, /admin, /myid
+# =========================================================
+async def after_report(reported_id, reporter_id):
+    try:
+        docs = await asyncio.to_thread(lambda: list(db.collection("reports").where("reported_user_id", "==", reported_id).stream()))
+        new = [d.to_dict() or {} for d in docs if (d.to_dict() or {}).get("status", "new") == "new"]
+        reporters = {r.get("reporter_id") for r in new}
+        fields = {"reports_count": len(new)}
+        limit = int(SETTINGS.get("report_hide") or 0)
+        auto = bool(limit and len(reporters) >= limit)
+        if auto:
+            fields["hidden"] = True
+        await asyncio.to_thread(db.collection("users").document(reported_id).update, fields)
+        doc = await firebase_get(db.collection("users").document(reported_id))
+        p = (doc.to_dict() or {}) if doc and doc.exists else {}
+        if not admin_ids() or not p:
+            return
+        cap = (f"🚨 <b>Скарга</b> ({len(new)} від {len(reporters)} людей)" + (" — <b>анкету приховано автоматично</b>" if auto else "") +
+               f"\n\n👤 {p.get('name')}, {p.get('age')} · {p.get('country')}\n" + (f"@{p['username']}\n" if p.get("username") else "") +
+               f"ID: <code>{reported_id}</code>\n\n📝 {str(p.get('about', ''))[:500]}")
+        kb = types.InlineKeyboardMarkup(inline_keyboard=[[
+            types.InlineKeyboardButton(text="⛔️ Забанити", callback_data=f"adm_ban_{reported_id}"),
+            types.InlineKeyboardButton(text="🙈 Сховати", callback_data=f"adm_hide_{reported_id}"),
+            types.InlineKeyboardButton(text="✅ Все ок", callback_data=f"adm_ok_{reported_id}"),
+        ]])
+        for aid in admin_ids():
+            await safe_send_photo(aid, p.get("photo"), caption=cap[:1000], parse_mode="HTML", reply_markup=kb)
+    except Exception as e:
+        logging.error(f"after_report: {e}")
+
+async def mark_reports(uid, status):
+    def run():
+        for d in db.collection("reports").where("reported_user_id", "==", uid).stream():
+            if (d.to_dict() or {}).get("status", "new") == "new":
+                d.reference.update({"status": status, "handled_at": int(time.time())})
+    await asyncio.to_thread(run)
+
+@dp.callback_query(F.data.startswith("adm_"))
+async def admin_callback(callback: types.CallbackQuery):
+    if str(callback.from_user.id) not in admin_ids():
+        return await callback.answer("Немає доступу", show_alert=True)
+    _, action, uid = callback.data.split("_", 2)
+    ref = db.collection("users").document(uid)
+    try:
+        if action == "ban":
+            await asyncio.to_thread(ref.update, {"banned": True, "banned_at": int(time.time())})
+            on_ban(uid, True)
+            await mark_reports(uid, "banned")
+            await safe_send_message(uid, "⛔️ Ваш акаунт заблоковано адміністрацією за порушення правил.")
+            note = "⛔️ Забанено"
+        elif action == "hide":
+            await asyncio.to_thread(ref.update, {"hidden": True})
+            note = "🙈 Приховано зі стрічки"
+        else:
+            await asyncio.to_thread(ref.update, {"hidden": False, "reports_count": 0})
+            await mark_reports(uid, "dismissed")
+            note = "✅ Скаргу відхилено"
+        await callback.answer(note)
+        await callback.message.edit_reply_markup(reply_markup=None)
+        await callback.message.reply(note)
+    except Exception as e:
+        logging.error(f"admin_callback: {e}")
+        await callback.answer("Помилка: анкету вже видалено?", show_alert=True)
+
+@dp.message(Command("myid"))
+async def cmd_myid(message: types.Message):
+    await message.answer(f"Ваш Telegram ID: <code>{message.from_user.id}</code>", parse_mode="HTML")
+
+@dp.message(Command("admin"))
+async def cmd_admin(message: types.Message):
+    if str(message.from_user.id) not in admin_ids():
+        return
+    docs = await asyncio.to_thread(lambda: list(db.collection("users").stream()))
+    us = [d.to_dict() or {} for d in docs]
+    now = time.time()
+    def recent(u, k, days):
+        v = u.get(k)
+        return hasattr(v, "timestamp") and v.timestamp() > now - days * 86400
+    new_rep = await asyncio.to_thread(lambda: sum(1 for d in db.collection("reports").stream() if (d.to_dict() or {}).get("status", "new") == "new"))
+    url = os.getenv("ADMIN_URL") or (f"https://{os.getenv('RAILWAY_PUBLIC_DOMAIN')}/admin" if os.getenv("RAILWAY_PUBLIC_DOMAIN") else "")
+    text = (f"🛠 <b>Адмінка</b>\n\n👥 Анкет: <b>{len(us)}</b> (👱‍♂️ {sum(1 for u in us if 'Чоловік' in str(u.get('gender')))} · 👩 {sum(1 for u in us if 'Жінка' in str(u.get('gender')))})\n"
+            f"🆕 За добу: <b>{sum(1 for u in us if recent(u, 'registered_at', 1))}</b> · за тиждень: <b>{sum(1 for u in us if recent(u, 'registered_at', 7))}</b>\n"
+            f"🔥 Активні за добу: <b>{sum(1 for u in us if recent(u, 'last_active', 1))}</b>\n"
+            f"🚨 Нових скарг: <b>{new_rep}</b> · ⛔️ забанено: {sum(1 for u in us if u.get('banned'))}\n" + (f"\n🔗 {url}" if url else "\nВеб-адмінка: відкрийте домен сервісу Railway + /admin"))
+    await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
+
+# =========================================================
 # POOLING & RUN
 # =========================================================
 async def main():
     asyncio.create_task(internet_watcher())
     asyncio.create_task(firebase_watcher())
+    if db:
+        await load_settings()
+        await load_banned()
+        asyncio.create_task(settings_watcher())
+        await start_admin(Ctx(db, bot, SETTINGS, save_settings, admin_ids, on_ban))
     
     print("🚀 Бот запускається...")
     await dp.start_polling(bot)
