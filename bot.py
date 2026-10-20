@@ -16,6 +16,8 @@ from aiogram import BaseMiddleware
 import firebase_admin
 from firebase_admin import credentials, firestore
 from admin import Ctx, start_admin
+from webapp import MiniApp, app_url
+import sys
 
 # =========================================================
 # DISCLAIMER & CONFIG
@@ -260,6 +262,10 @@ def menu_texts():
 def esc(s):
     return html.escape(str(s or ""))
 
+def app_button():
+    url = app_url()
+    return types.KeyboardButton(text="📱 Відкрити застосунок", web_app=types.WebAppInfo(url=url)) if url.startswith("https://") else None
+
 def get_main_menu():
     kb = [
         [types.KeyboardButton(text=B_FEED)],
@@ -267,6 +273,8 @@ def get_main_menu():
         [types.KeyboardButton(text=B_FILTERS), types.KeyboardButton(text=B_INVITE)],
         [types.KeyboardButton(text=B_MORE)],
     ]
+    if app_button():
+        kb.insert(0, [app_button()])
     return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, is_persistent=True, input_field_placeholder="Обери дію 👇")
 
 def reply_kb(rows, one_time=True):
@@ -678,6 +686,68 @@ async def make_match(user_id, cid, note=""):
 # =========================================================
 # FEED CALLBACKS (кнопки під анкетою)
 # =========================================================
+# =========================================================
+# СПІЛЬНІ ДІЇ (бот і застосунок у Telegram)
+# =========================================================
+DAY_S = 86400
+
+async def mark_seen(uid, cid):
+    await firebase_set(user_ref(uid).collection("seen").document(str(cid)), {"ts": firestore.SERVER_TIMESTAMP})
+
+async def do_like(user_id, cid, incoming):
+    """Лайк. Повертає True, якщо вийшла взаємна симпатія."""
+    user_id, cid = str(user_id), str(cid)
+    match = bool(incoming)
+    if incoming:
+        await firebase_delete(user_ref(user_id).collection("likes").document(cid))
+    else:
+        # якщо ця людина вже лайкнула мене — одразу взаємність
+        mine = await firebase_get(user_ref(user_id).collection("likes").document(cid))
+        if mine and mine.exists:
+            await firebase_delete(mine.reference)
+            match = True
+        else:
+            await firebase_set(user_ref(cid).collection("likes").document(user_id), {"ts": firestore.SERVER_TIMESTAMP})
+            asyncio.create_task(notify_liked(cid))
+    await mark_seen(user_id, cid)
+    if match:
+        await make_match(user_id, cid)
+    return match
+
+async def do_skip(user_id, cid, incoming):
+    if incoming:
+        await firebase_delete(user_ref(user_id).collection("likes").document(str(cid)))
+    await mark_seen(user_id, cid)
+
+async def superlike_wait(uid):
+    me = await get_user(uid) or {}
+    return max(0, int(me.get("superlike_at") or 0) + DAY_S - time.time())
+
+async def do_superlike(uid, cid, incoming, text):
+    """Суперлайк з повідомленням (раз на добу). Повертає True, якщо вийшла взаємність."""
+    uid, cid = str(uid), str(cid)
+    await update_user(uid, {"superlike_at": int(time.time())})
+    await mark_seen(uid, cid)
+    mine = None if incoming else await firebase_get(user_ref(uid).collection("likes").document(cid))
+    if incoming or (mine and mine.exists):
+        await firebase_delete(user_ref(uid).collection("likes").document(cid))
+        await make_match(uid, cid, note=text)
+        return True
+    await firebase_set(user_ref(cid).collection("likes").document(uid), {"ts": firestore.SERVER_TIMESTAMP, "msg": text})
+    await safe_send_message(cid, f"💌 Тобі надіслали <b>суперлайк</b>: «{esc(text)}»\n\nВідкрий анкети — ця людина буде першою.", parse_mode="HTML",
+                            reply_markup=ikb([[("👀 Подивитися", "f:more")]]))
+    return False
+
+async def do_report(uid, cid, key):
+    uid, cid = str(uid), str(cid)
+    reason = REPORT_REASONS.get(key, REPORT_REASONS["other"])
+    await asyncio.to_thread(db.collection("reports").add, {
+        "reporter_id": uid, "reported_user_id": cid, "reason": reason,
+        "timestamp": firestore.SERVER_TIMESTAMP, "status": "new"})
+    await mark_seen(uid, cid)
+    await firebase_delete(user_ref(uid).collection("likes").document(cid))
+    asyncio.create_task(after_report(cid, uid))
+
 @dp.callback_query(F.data.startswith("f:"))
 async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
     user_id = str(callback.from_user.id)
@@ -738,13 +808,7 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
                 pass
             return
         if act == "rr":
-            reason = REPORT_REASONS.get(parts[3], REPORT_REASONS["other"])
-            await asyncio.to_thread(db.collection("reports").add, {
-                "reporter_id": user_id, "reported_user_id": cid, "reason": reason,
-                "timestamp": firestore.SERVER_TIMESTAMP, "status": "new"})
-            await firebase_set(user_ref(user_id).collection("seen").document(cid), {"ts": firestore.SERVER_TIMESTAMP})
-            await firebase_delete(user_ref(user_id).collection("likes").document(cid))
-            asyncio.create_task(after_report(cid, user_id))
+            await do_report(user_id, cid, parts[3])
             await callback.answer("🚨 Скаргу прийнято. Модератор перевірить анкету.", show_alert=True)
             try:
                 await msg.delete()  # повідомлення меню зі скаргою
@@ -754,8 +818,7 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
             return await show_next(user_id, msg.chat.id, mid=cur.get("mid") if cur.get("cid") == cid else None)
         incoming = parts[3] == "1"
         if act == "sl":
-            me = await get_user(user_id) or {}
-            left = int(me.get("superlike_at") or 0) + DAY_S - time.time()
+            left = await superlike_wait(user_id)
             if left > 0:
                 return await callback.answer(f"💌 Суперлайк — раз на добу. Наступний через {int(left // 3600)} год {int(left % 3600 // 60)} хв", show_alert=True)
             await callback.answer()
@@ -770,25 +833,11 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
         name = (CURRENT.get(user_id) or {}).get("name", "") if (CURRENT.get(user_id) or {}).get("cid") == cid else ""
         if act == "l":
             await callback.answer("❤️")
-            match = incoming
-            if incoming:
-                await firebase_delete(user_ref(user_id).collection("likes").document(cid))
-            else:
-                # якщо ця людина вже лайкнула мене — одразу взаємність
-                mine = await firebase_get(user_ref(user_id).collection("likes").document(cid))
-                if mine and mine.exists:
-                    await firebase_delete(mine.reference)
-                    match = True
-                else:
-                    await firebase_set(user_ref(cid).collection("likes").document(user_id), {"ts": firestore.SERVER_TIMESTAMP})
-                    asyncio.create_task(notify_liked(cid))
-            if match:
-                await make_match(user_id, cid)
+            await do_like(user_id, cid, incoming)
             return await show_next(user_id, msg.chat.id, msg)
         if act == "n":
             await callback.answer()
-            if incoming:
-                await firebase_delete(user_ref(user_id).collection("likes").document(cid))
+            await do_skip(user_id, cid, incoming)
             return await show_next(user_id, msg.chat.id, msg)
         await callback.answer()
     except Exception as e:
@@ -798,7 +847,6 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
         except Exception:
             pass
 
-DAY_S = 86400
 
 @dp.message(SuperLike.message)
 async def superlike_message(message: types.Message, state: FSMContext):
@@ -810,21 +858,7 @@ async def superlike_message(message: types.Message, state: FSMContext):
     uid, cid = str(message.from_user.id), data.get("sl_cid")
     if not cid:
         return
-    if data.get("sl_incoming"):
-        # людина вже лайкнула — це одразу взаємність, повідомлення відправимо разом
-        await firebase_delete(user_ref(uid).collection("likes").document(cid))
-        await update_user(uid, {"superlike_at": int(time.time())})
-        asyncio.create_task(make_match(uid, cid, note=text))
-    else:
-        mine = await firebase_get(user_ref(uid).collection("likes").document(cid))
-        await update_user(uid, {"superlike_at": int(time.time())})
-        if mine and mine.exists:
-            await firebase_delete(mine.reference)
-            asyncio.create_task(make_match(uid, cid, note=text))
-        else:
-            await firebase_set(user_ref(cid).collection("likes").document(uid), {"ts": firestore.SERVER_TIMESTAMP, "msg": text})
-            await send_with_effect("text", cid, EFFECT_HEART, text=f"💌 Тобі надіслали <b>суперлайк</b>: «{esc(text)}»\n\nВідкрий анкети — ця людина буде першою.", parse_mode="HTML",
-                                    reply_markup=ikb([[("👀 Подивитися", "f:more")]]))
+    await do_superlike(uid, cid, data.get("sl_incoming"), text)
     await send_with_effect("text", message.chat.id, EFFECT_HEART, text="💌 <b>Суперлайк надіслано!</b>", parse_mode="HTML", reply_markup=get_main_menu())
     cur = CURRENT.get(uid) or {}
     await show_next(uid, message.chat.id, mid=cur.get("mid") if cur.get("cid") == cid else None)
@@ -871,7 +905,11 @@ async def cmd_start(message: types.Message, state: FSMContext):
         referrer = args[0][4:] if args and args[0].startswith("ref_") else None
         if await get_user(user_id):
             await state.clear()
-            return await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())
+            await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())
+            if app_url().startswith("https://"):
+                await message.answer("📱 Анкети на весь екран — у застосунку прямо в Telegram:", reply_markup=types.InlineKeyboardMarkup(
+                    inline_keyboard=[[types.InlineKeyboardButton(text="❤️ Відкрити застосунок", web_app=types.WebAppInfo(url=app_url()))]]))
+            return
         await state.clear()
         if referrer and referrer != user_id:
             await state.update_data(referrer=referrer)
@@ -1726,7 +1764,16 @@ async def main():
         await load_banned()
         asyncio.create_task(settings_watcher())
         asyncio.create_task(nudge_loop())
-        await start_admin(Ctx(db, bot, SETTINGS, save_settings, admin_ids, on_ban))
+        mini = MiniApp(sys.modules[__name__])
+        await start_admin(Ctx(db, bot, SETTINGS, save_settings, admin_ids, on_ban), extra=mini.setup)
+        if app_url().startswith("https://"):
+            try:
+                await bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(text="❤️ Знайомства", web_app=types.WebAppInfo(url=app_url())))
+                logging.info(f"📱 Застосунок: {app_url()}")
+            except Exception as e:
+                logging.error(f"menu button: {e}")
+        else:
+            logging.warning("📱 Застосунок вимкнено: згенеруйте домен у Railway (Settings → Networking) або задайте WEBAPP_URL")
     
     try:
         await bot.set_my_commands([

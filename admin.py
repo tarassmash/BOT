@@ -567,9 +567,12 @@ class Admin:
         return app
 
 
-async def start_admin(ctx: Ctx):
+async def start_admin(ctx: Ctx, extra=None):
     adm = Admin(ctx)
-    runner = web.AppRunner(adm.app(), access_log=None)
+    app = adm.app()
+    if extra:
+        extra(app)  # застосунок у Telegram (/app) на тому ж сервері
+    runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     port = int(os.getenv("PORT", "8080"))
     await web.TCPSite(runner, "0.0.0.0", port).start()
