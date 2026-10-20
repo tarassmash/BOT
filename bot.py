@@ -496,15 +496,55 @@ async def find_next(user_id):
     await firebase_set(ref.collection("seen").document(p["tg_id"]), {"ts": firestore.SERVER_TIMESTAMP})
     return p, False, me
 
-async def show_next(user_id, chat_id, msg=None, mid=None):
-    """Показує наступну анкету. Якщо є повідомлення з попередньою — міняє його на місці (без нового повідомлення і звуку)."""
+# повноекранні ефекти Telegram (лише в особистих чатах); якщо ефект недоступний — шлемо без нього
+EFFECT_PARTY = "5046509860389126442"   # 🎉
+EFFECT_HEART = "5159385139981059251"   # ❤️
+
+async def send_with_effect(kind, chat_id, effect, **kw):
+    fn = bot.send_photo if kind == "photo" else bot.send_message
     try:
-        p, incoming, me = await find_next(user_id)
+        return await fn(chat_id, message_effect_id=effect, **kw)
+    except TelegramForbiddenError:
+        return None
+    except Exception as e:
+        logging.info(f"effect fallback: {e}")
+        if kind == "photo":
+            return await safe_send_photo(chat_id, kw.pop("photo"), **kw)
+        return await safe_send_message(chat_id, kw.pop("text"), **kw)
+
+STAMPS = {
+    "like": ("❤️ ❤️ ❤️\n\n<b>ЛАЙК!</b> {name} дізнається, що сподобався(-лась) тобі 😉", "❤️ Надіслано"),
+    "match": ("🎉 🎉 🎉\n\n<b>ВЗАЄМНО!</b> Ти і {name} сподобались одне одному", "🎉 Це взаємність!"),
+    "next": ("👋 <b>Далі…</b>", "⏳"),
+}
+
+async def stamp(chat_id, mid, kind, name):
+    """Коротка «анімація» на тій самій картці: штамп поверх фото, поки вантажиться наступна."""
+    text, btn = STAMPS[kind]
+    try:
+        await bot.edit_message_caption(chat_id=chat_id, message_id=mid, caption=text.format(name=esc(name)), parse_mode="HTML",
+                                       reply_markup=ikb([[(btn, "noop")]]))
+    except Exception:
+        pass
+
+async def show_next(user_id, chat_id, msg=None, mid=None, anim=None, anim_name=""):
+    """Показує наступну анкету. Якщо є повідомлення з попередньою — міняє його на місці (без нового повідомлення і звуку)."""
+    if msg and msg.photo:
+        mid = msg.message_id
+    try:
+        if anim and mid:
+            # штамп і пошук наступної анкети йдуть одночасно; штамп видно щонайменше ~0.7 с
+            t0 = time.monotonic()
+            await stamp(chat_id, mid, anim, anim_name)
+            p, incoming, me = await find_next(user_id)
+            wait = (0.9 if anim != "next" else 0.45) - (time.monotonic() - t0)
+            if wait > 0:
+                await asyncio.sleep(wait)
+        else:
+            p, incoming, me = await find_next(user_id)
     except Exception as e:
         logging.error(f"find_next: {e}")
         return await safe_send_message(chat_id, "⚠️ Не вдалося завантажити анкети. Спробуй ще раз за хвилину.", reply_markup=get_main_menu())
-    if msg and msg.photo:
-        mid = msg.message_id
     if p is None:
         CURRENT.pop(str(user_id), None)
         if mid:
@@ -567,7 +607,7 @@ async def make_match(user_id, cid, note=""):
         if note and to == cid:
             text += f"\n\n💌 Повідомлення: «{esc(note)}»"
         kb = ikb([[("💬 Написати", "url:" + link)]]) if link else None
-        await safe_send_photo(to, who.get("photo"), caption=text, parse_mode="HTML", reply_markup=kb)
+        await send_with_effect("photo", to, EFFECT_PARTY, photo=who.get("photo"), caption=text, parse_mode="HTML", reply_markup=kb)
     if not me.get("username"):
         await safe_send_message(user_id, "💡 У тебе немає нікнейму в Telegram, тому тобі складніше написати. Додай його: Налаштування → Ім'я користувача.")
 
@@ -640,26 +680,33 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
                 return await msg.edit_text(prompt, parse_mode="HTML", reply_markup=ikb([[("✖️ Скасувати", "f:slx")]]))
             except Exception:
                 return await msg.answer(prompt, parse_mode="HTML", reply_markup=ikb([[("✖️ Скасувати", "f:slx")]]))
+        name = (CURRENT.get(user_id) or {}).get("name", "") if (CURRENT.get(user_id) or {}).get("cid") == cid else ""
         if act == "l":
             await callback.answer("❤️")
+            match = incoming
             if incoming:
                 await firebase_delete(user_ref(user_id).collection("likes").document(cid))
-                asyncio.create_task(make_match(user_id, cid))
             else:
                 # якщо ця людина вже лайкнула мене — одразу взаємність
                 mine = await firebase_get(user_ref(user_id).collection("likes").document(cid))
                 if mine and mine.exists:
                     await firebase_delete(mine.reference)
-                    asyncio.create_task(make_match(user_id, cid))
+                    match = True
                 else:
                     await firebase_set(user_ref(cid).collection("likes").document(user_id), {"ts": firestore.SERVER_TIMESTAMP})
                     asyncio.create_task(notify_liked(cid))
-            return await show_next(user_id, msg.chat.id, msg)
+            if match:
+                # спочатку штамп «ВЗАЄМНО!», потім святкове повідомлення з ефектом 🎉, потім наступна анкета
+                await stamp(msg.chat.id, msg.message_id, "match", name)
+                await asyncio.sleep(1.0)
+                await make_match(user_id, cid)
+                return await show_next(user_id, msg.chat.id, msg)
+            return await show_next(user_id, msg.chat.id, msg, anim="like", anim_name=name)
         if act == "n":
             await callback.answer()
             if incoming:
                 await firebase_delete(user_ref(user_id).collection("likes").document(cid))
-            return await show_next(user_id, msg.chat.id, msg)
+            return await show_next(user_id, msg.chat.id, msg, anim="next")
         await callback.answer()
     except Exception as e:
         logging.error(f"feed_callback {callback.data}: {e}")
@@ -693,9 +740,9 @@ async def superlike_message(message: types.Message, state: FSMContext):
             asyncio.create_task(make_match(uid, cid, note=text))
         else:
             await firebase_set(user_ref(cid).collection("likes").document(uid), {"ts": firestore.SERVER_TIMESTAMP, "msg": text})
-            await safe_send_message(cid, "💌 Тобі надіслали <b>суперлайк</b> з повідомленням! Відкрий анкети — ця людина буде першою.", parse_mode="HTML",
+            await send_with_effect("text", cid, EFFECT_HEART, text="💌 Тобі надіслали <b>суперлайк</b> з повідомленням! Відкрий анкети — ця людина буде першою.", parse_mode="HTML",
                                     reply_markup=ikb([[("👀 Подивитися", "f:more")]]))
-    await message.answer("💌 Суперлайк надіслано!", reply_markup=get_main_menu())
+    await send_with_effect("text", message.chat.id, EFFECT_HEART, text="💌 <b>Суперлайк надіслано!</b>", parse_mode="HTML", reply_markup=get_main_menu())
     cur = CURRENT.get(uid) or {}
     await show_next(uid, message.chat.id, mid=cur.get("mid") if cur.get("cid") == cid else None)
 
