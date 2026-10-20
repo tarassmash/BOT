@@ -552,16 +552,10 @@ EFFECT_PARTY = "5046509860389126442"   # 🎉
 EFFECT_HEART = "5159385139981059251"   # ❤️
 
 async def send_with_effect(kind, chat_id, effect, **kw):
-    fn = bot.send_photo if kind == "photo" else bot.send_message
-    try:
-        return await fn(chat_id, message_effect_id=effect, **kw)
-    except TelegramForbiddenError:
-        return None
-    except Exception as e:
-        logging.info(f"effect fallback: {e}")
-        if kind == "photo":
-            return await safe_send_photo(chat_id, kw.pop("photo"), **kw)
-        return await safe_send_message(chat_id, kw.pop("text"), **kw)
+    # ефекти вимкнено (без анімацій) — звичайне повідомлення
+    if kind == "photo":
+        return await safe_send_photo(chat_id, kw.pop("photo"), **kw)
+    return await safe_send_message(chat_id, kw.pop("text"), **kw)
 
 STAMPS = {
     "like": ("❤️ ❤️ ❤️\n\n<b>ЛАЙК!</b> {name} дізнається, що сподобався(-лась) тобі 😉", "❤️ Надіслано"),
@@ -610,7 +604,8 @@ async def show_next(user_id, chat_id, msg=None, mid=None, anim=None, anim_name="
         return await safe_send_message(chat_id, f"😔 <b>Нових анкет поки немає.</b>\n\n{hint}", parse_mode="HTML", disable_notification=True,
                                        reply_markup=ikb([[("⚙️ Фільтри", "flt:open"), ("🔄 Ще раз", "f:more")]]))
     media = media_list(p)
-    caption, kb = card_text(p, me, incoming, note=p.get("_note", "")), feed_kb(p["tg_id"], incoming, len(media))
+    # у стрічці — лише фото і дві кнопки, без тексту (анкету можна прочитати в «☰ Ще» → «ℹ️ Про …»)
+    caption, kb = None, feed_kb(p["tg_id"], incoming, len(media))
     CURRENT[str(user_id)] = {"cid": p["tg_id"], "i": incoming, "name": p.get("name", ""), "chat": chat_id, "mid": None, "note": p.get("_note", "")}
     if mid:
         try:
@@ -693,6 +688,18 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
         if act == "more":
             await callback.answer()
             return await show_next(user_id, msg.chat.id)
+        if act == "i":
+            await callback.answer()
+            p, me = await get_user(parts[2]), await get_user(user_id)
+            if not p:
+                return
+            cur = CURRENT.get(user_id) or {}
+            note = cur.get("note", "") if cur.get("cid") == parts[2] else ""
+            try:
+                return await msg.edit_text(card_text(p, me, parts[3] == "1", note=note), parse_mode="HTML",
+                                           reply_markup=ikb([[("✖️ Закрити", "x:del")]]))
+            except Exception:
+                return
         if act == "p":
             await callback.answer()
             p, me = await get_user(parts[2]), await get_user(user_id)
@@ -702,7 +709,7 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
             idx = idx if idx < len(media) else 0
             cur = CURRENT.get(user_id) or {}
             note = cur.get("note", "") if cur.get("cid") == parts[2] else ""
-            return await msg.edit_media(input_media(media[idx], card_text(p, me, parts[3] == "1", note=note)),
+            return await msg.edit_media(input_media(media[idx], None),
                                         reply_markup=feed_kb(parts[2], parts[3] == "1", len(media), idx))
         if act == "slx":
             await state.clear()
@@ -776,17 +783,13 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
                     await firebase_set(user_ref(cid).collection("likes").document(user_id), {"ts": firestore.SERVER_TIMESTAMP})
                     asyncio.create_task(notify_liked(cid))
             if match:
-                # спочатку штамп «ВЗАЄМНО!», потім святкове повідомлення з ефектом 🎉, потім наступна анкета
-                await stamp(msg.chat.id, msg.message_id, "match", name)
-                await asyncio.sleep(1.0)
                 await make_match(user_id, cid)
-                return await show_next(user_id, msg.chat.id, msg)
-            return await show_next(user_id, msg.chat.id, msg, anim="like", anim_name=name)
+            return await show_next(user_id, msg.chat.id, msg)
         if act == "n":
             await callback.answer()
             if incoming:
                 await firebase_delete(user_ref(user_id).collection("likes").document(cid))
-            return await show_next(user_id, msg.chat.id, msg, anim="next")
+            return await show_next(user_id, msg.chat.id, msg)
         await callback.answer()
     except Exception as e:
         logging.error(f"feed_callback {callback.data}: {e}")
@@ -820,7 +823,7 @@ async def superlike_message(message: types.Message, state: FSMContext):
             asyncio.create_task(make_match(uid, cid, note=text))
         else:
             await firebase_set(user_ref(cid).collection("likes").document(uid), {"ts": firestore.SERVER_TIMESTAMP, "msg": text})
-            await send_with_effect("text", cid, EFFECT_HEART, text="💌 Тобі надіслали <b>суперлайк</b> з повідомленням! Відкрий анкети — ця людина буде першою.", parse_mode="HTML",
+            await send_with_effect("text", cid, EFFECT_HEART, text=f"💌 Тобі надіслали <b>суперлайк</b>: «{esc(text)}»\n\nВідкрий анкети — ця людина буде першою.", parse_mode="HTML",
                                     reply_markup=ikb([[("👀 Подивитися", "f:more")]]))
     await send_with_effect("text", message.chat.id, EFFECT_HEART, text="💌 <b>Суперлайк надіслано!</b>", parse_mode="HTML", reply_markup=get_main_menu())
     cur = CURRENT.get(uid) or {}
@@ -1541,7 +1544,7 @@ async def menu_more(message: types.Message, state: FSMContext):
     if cur and cur.get("cid"):
         i = "1" if cur.get("i") else "0"
         name = str(cur.get("name") or "")[:20]
-        rows += [[(f"💌 Суперлайк: {name}", f"f:sl:{cur['cid']}:{i}")], [(f"🚨 Скарга: {name}", f"f:r:{cur['cid']}:{i}")]]
+        rows += [[(f"ℹ️ Про {name}", f"f:i:{cur['cid']}:{i}")], [(f"💌 Суперлайк: {name}", f"f:sl:{cur['cid']}:{i}")], [(f"🚨 Скарга: {name}", f"f:r:{cur['cid']}:{i}")]]
     await message.answer("☰ <b>Ще</b>", parse_mode="HTML", reply_markup=ikb(rows + [
         [("☕️ Вільний(-а) сьогодні", "me:coffee")],
         [("ℹ️ Як це працює", "more:help"), ("📜 Правила", "more:privacy")],
