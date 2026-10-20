@@ -108,6 +108,7 @@ SETTINGS = {
     "premium_minutes": 10,
     "report_hide": 3,
     "admin_ids": [],
+    "nudges": True,
 }
 ENV_ADMINS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
 BANNED = set()
@@ -199,6 +200,7 @@ class Registration(StatesGroup):
     waiting_for_name = State()
     waiting_for_age = State()
     waiting_for_country = State()
+    waiting_for_city = State()
     waiting_for_gender = State()
     waiting_for_search = State()
     waiting_for_photo = State()
@@ -220,6 +222,7 @@ class EditProfile(StatesGroup):
     about = State()
     location = State()
     hometown = State()
+    city = State()
 
 class LeoSearch(StatesGroup):
     watching_profiles = State()  # старі кнопки 👍👎 (до оновлення)
@@ -241,6 +244,8 @@ B_MORE = "☰ Ще"
 SKIP = "Пропустити ➡️"
 HOMETOWNS = ["Київ", "Львів", "Харків", "Одеса", "Дніпро", "Запоріжжя", "Вінниця", "Івано-Франківськ"]
 COFFEE_HOURS = 24
+DONE_MEDIA = "✅ Це все, зберегти"
+MAX_MEDIA = 3
 # старі кнопки, які ще можуть бути в людей на клавіатурі
 OLD_FEED = ["1. Дивитися анкети 👥"]
 OLD_FILTERS = ["🔍 Пошук з фільтрами ⚙️"]
@@ -404,29 +409,75 @@ def same_home(me, p):
     a, b = str((me or {}).get("hometown") or "").strip().lower(), str(p.get("hometown") or "").strip().lower()
     return bool(a and a == b)
 
+def media_list(p):
+    m = p.get("media") or []
+    return m if m else ([{"t": "photo", "id": p["photo"]}] if p.get("photo") else [])
+
+# текст над фото, кнопки одразу під ним — фото займає максимум екрана
+def input_media(m, caption):
+    cls = types.InputMediaVideo if m.get("t") == "video" else types.InputMediaPhoto
+    return cls(media=m["id"], caption=caption, parse_mode="HTML", show_caption_above_media=True)
+
+async def send_media(chat_id, m, caption, kb=None, silent=True):
+    for _ in range(3):
+        try:
+            fn = bot.send_video if m.get("t") == "video" else bot.send_photo
+            return await fn(chat_id, m["id"], caption=caption, parse_mode="HTML", reply_markup=kb,
+                            disable_notification=silent, show_caption_above_media=True)
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after)
+        except TelegramForbiddenError:
+            return None
+        except Exception as e:
+            logging.error(f"send_media: {e}")
+            await asyncio.sleep(1)
+    return None
+
+def media_of_message(message):
+    if message.photo:
+        return {"t": "photo", "id": message.photo[-1].file_id}
+    if message.video:
+        thumb = message.video.thumbnail.file_id if message.video.thumbnail else None
+        return {"t": "video", "id": message.video.file_id, "thumb": thumb}
+    return None
+
+def media_fields(media):
+    """Поля анкети: media — до 3 фото/відео; photo — перше фото (або обкладинка відео) для адмінки й повідомлень про симпатію."""
+    first = next((m["id"] for m in media if m["t"] == "photo"), None) or next((m.get("thumb") for m in media if m.get("thumb")), None) or media[0]["id"]
+    return {"media": media[:MAX_MEDIA], "photo": first}
+
 def card_text(p, me=None, incoming=False, own=False, note=""):
     lines = []
     if note:
-        lines.append(f"💌 <b>Суперлайк!</b> «{esc(note)}»\n")
+        lines.append(f"💌 <b>Суперлайк:</b> «{esc(note)}»")
     elif incoming:
-        lines.append("❤️ <b>Ти сподобався(-лась) цій людині!</b>\n")
-    lines.append(f"<b>{esc(p.get('name'))}, {esc(p.get('age'))}</b>")
-    place = f"🌍 {esc(p.get('country'))}"
+        lines.append("❤️ <b>Ти сподобався(-лась) цій людині!</b>")
+    # компактно, як у Дайвінчику: «Оля, 24, Аліканте – текст», щоб фото було великим
+    where = esc(p.get("city") or p.get("country"))
+    tags = []
     d = dist_km(me, p) if not own else None
     if d:
-        place += f" · 📍 ~{d} км від тебе"
-    lines.append(place)
+        tags.append(f"📍 {d} км")
     if p.get("hometown"):
-        lines.append(f"🏠 Родом: {esc(p['hometown'])}" + (" — <b>земляки!</b> 🤝" if not own and same_home(me, p) else ""))
+        tags.append(f"🏠 {esc(p['hometown'])}" + (" 🤝" if not own and same_home(me, p) else ""))
     if is_free(p):
-        lines.append("☕️ <b>Вільний(-а) сьогодні — можна на каву</b>")
-    if p.get("about"):
-        lines.append(f"\n{esc(str(p.get('about'))[:700])}")
+        tags.append("☕️ вільний(-а) сьогодні")
+    about = str(p.get("about") or "").strip()
+    limit = 700 if own else 260
+    if len(about) > limit:
+        about = about[:limit].rsplit(" ", 1)[0] + "…"
+    head = f"<b>{esc(p.get('name'))}, {esc(p.get('age'))}</b>, {where}"
+    lines.append(head + (f" – {esc(about)}" if about else ""))
+    if tags:
+        lines.append(" · ".join(tags))
     return "\n".join(lines)[:1024]
 
-def feed_kb(cid, incoming):
+def feed_kb(cid, incoming, n=1, idx=0):
     i = "1" if incoming else "0"
-    return ikb([[("❤️ Лайк", f"f:l:{cid}:{i}"), ("👎 Далі", f"f:n:{cid}:{i}")]])
+    rows = [[("❤️", f"f:l:{cid}:{i}"), ("👎", f"f:n:{cid}:{i}")]]
+    if n > 1:
+        rows.insert(0, [(f"📷 {idx + 1}/{n} ▸", f"f:p:{cid}:{i}:{(idx + 1) % n}")])
+    return ikb(rows)
 
 # остання показана анкета кожного користувача — для суперлайку і скарги з меню «☰ Ще»
 CURRENT = {}
@@ -523,7 +574,7 @@ async def stamp(chat_id, mid, kind, name):
     text, btn = STAMPS[kind]
     try:
         await bot.edit_message_caption(chat_id=chat_id, message_id=mid, caption=text.format(name=esc(name)), parse_mode="HTML",
-                                       reply_markup=ikb([[(btn, "noop")]]))
+                                       show_caption_above_media=True, reply_markup=ikb([[(btn, "noop")]]))
     except Exception:
         pass
 
@@ -558,11 +609,12 @@ async def show_next(user_id, chat_id, msg=None, mid=None, anim=None, anim_name="
         hint = "Спробуй інші фільтри або зазирни пізніше — нові люди реєструються щодня." if (f.get("country") or f.get("min_age") or f.get("max_age")) else "Зазирни пізніше — нові люди реєструються щодня. А поки можна запросити друзів 🎁"
         return await safe_send_message(chat_id, f"😔 <b>Нових анкет поки немає.</b>\n\n{hint}", parse_mode="HTML", disable_notification=True,
                                        reply_markup=ikb([[("⚙️ Фільтри", "flt:open"), ("🔄 Ще раз", "f:more")]]))
-    caption, kb = card_text(p, me, incoming, note=p.get("_note", "")), feed_kb(p["tg_id"], incoming)
-    CURRENT[str(user_id)] = {"cid": p["tg_id"], "i": incoming, "name": p.get("name", ""), "chat": chat_id, "mid": None}
+    media = media_list(p)
+    caption, kb = card_text(p, me, incoming, note=p.get("_note", "")), feed_kb(p["tg_id"], incoming, len(media))
+    CURRENT[str(user_id)] = {"cid": p["tg_id"], "i": incoming, "name": p.get("name", ""), "chat": chat_id, "mid": None, "note": p.get("_note", "")}
     if mid:
         try:
-            await bot.edit_message_media(chat_id=chat_id, message_id=mid, media=types.InputMediaPhoto(media=p["photo"], caption=caption, parse_mode="HTML"), reply_markup=kb)
+            await bot.edit_message_media(chat_id=chat_id, message_id=mid, media=input_media(media[0], caption), reply_markup=kb)
             CURRENT[str(user_id)]["mid"] = mid
             return
         except Exception as e:
@@ -571,7 +623,7 @@ async def show_next(user_id, chat_id, msg=None, mid=None, anim=None, anim_name="
                 await bot.delete_message(chat_id, mid)
             except Exception:
                 pass
-    sent = await safe_send_photo(chat_id, p["photo"], caption=caption, parse_mode="HTML", reply_markup=kb, disable_notification=True)
+    sent = await send_media(chat_id, media[0], caption, kb)
     if sent:
         CURRENT[str(user_id)]["mid"] = sent.message_id
     return sent
@@ -584,8 +636,25 @@ async def notify_liked(cid):
     if now - _like_ping.get(cid, 0) < 3600:
         return
     _like_ping[cid] = now
-    await safe_send_message(cid, "❤️ Комусь сподобалась твоя анкета! Відкрий анкети — ця людина буде першою.",
-                            reply_markup=ikb([[("👀 Подивитися", "f:more")]]))
+    try:
+        n = len(list(await asyncio.to_thread(lambda: user_ref(cid).collection("likes").limit(50).get())))
+    except Exception:
+        n = 1
+    await safe_send_message(cid, f"❤️ Ти сподобався(-лась) <b>{people(n)}</b>! Показати?", parse_mode="HTML",
+                            reply_markup=ikb([[("👀 Показати", "f:more"), ("💤 Не зараз", "x:del")]]))
+
+def people(n):
+    n = max(1, int(n))
+    word = "людині" if n % 10 == 1 and n % 100 != 11 else "людям"
+    return f"{n}{'+' if n >= 50 else ''} {word}"
+
+@dp.callback_query(F.data == "x:del")
+async def x_delete(callback: types.CallbackQuery):
+    await callback.answer()
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
 
 def chat_link(p, uid):
     if p.get("username"):
@@ -602,8 +671,8 @@ async def make_match(user_id, cid, note=""):
         logging.error(f"match log: {e}")
     for to, who, who_id in ((user_id, other, cid), (cid, me, user_id)):
         link = chat_link(who, who_id)
-        text = (f"🎉 <b>Взаємна симпатія!</b>\n\nТи і <b>{esc(who.get('name'))}</b> сподобались одне одному.\n" +
-                ("Напиши першим(-ою) 👇" if link else f"Напиши: <a href=\"tg://user?id={who_id}\">{esc(who.get('name'))}</a>"))
+        text = (f"🎉 <b>Є взаємна симпатія!</b>\n\nТи і <b>{esc(who.get('name'))}</b> сподобались одне одному. Сподіваюсь, добре проведете час 😉\n\n" +
+                (f"Починай спілкуватися 👉 @{esc(who['username'])}" if link else f"Починай спілкуватися 👉 <a href=\"tg://user?id={who_id}\">{esc(who.get('name'))}</a>"))
         if note and to == cid:
             text += f"\n\n💌 Повідомлення: «{esc(note)}»"
         kb = ikb([[("💬 Написати", "url:" + link)]]) if link else None
@@ -624,6 +693,17 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
         if act == "more":
             await callback.answer()
             return await show_next(user_id, msg.chat.id)
+        if act == "p":
+            await callback.answer()
+            p, me = await get_user(parts[2]), await get_user(user_id)
+            if not p:
+                return
+            media, idx = media_list(p), int(parts[4])
+            idx = idx if idx < len(media) else 0
+            cur = CURRENT.get(user_id) or {}
+            note = cur.get("note", "") if cur.get("cid") == parts[2] else ""
+            return await msg.edit_media(input_media(media[idx], card_text(p, me, parts[3] == "1", note=note)),
+                                        reply_markup=feed_kb(parts[2], parts[3] == "1", len(media), idx))
         if act == "slx":
             await state.clear()
             await callback.answer("Скасовано")
@@ -839,6 +919,15 @@ async def process_country(message: types.Message, state: FSMContext):
     if message.text not in countries():
         return await message.answer("👇 Обери країну кнопкою", reply_markup=countries_kb())
     await state.update_data(country=message.text)
+    await message.answer("🏙 <b>З якого ти міста?</b>\n\nНапиши місто, де живеш зараз, наприклад: Аліканте", parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
+    await state.set_state(Registration.waiting_for_city)
+
+@dp.message(Registration.waiting_for_city)
+async def process_city(message: types.Message, state: FSMContext):
+    city = clean_town(message.text)
+    if not city:
+        return await message.answer("❌ Напиши назву міста текстом")
+    await state.update_data(city=city)
     await message.answer("👤 <b>Ти...</b>", parse_mode="HTML", reply_markup=reply_kb([[MEN, WOMEN]]))
     await state.set_state(Registration.waiting_for_gender)
 
@@ -855,19 +944,60 @@ async def process_search(message: types.Message, state: FSMContext):
     if message.text not in (WANT_F, WANT_M):
         return await message.answer("👇 Обери кнопкою", reply_markup=reply_kb([[WANT_F, WANT_M]]))
     await state.update_data(search=message.text)
-    await message.answer("📸 <b>Надішли своє реальне фото</b>\n\nОбличчя має бути добре видно. Анкети з чужими фото видаляються.\n📎 Скріпка → Фото.",
-                         parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
+    PENDING_MEDIA.pop(str(message.from_user.id), None)
+    await message.answer(MEDIA_PROMPT, parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(Registration.waiting_for_photo)
 
-@dp.message(Registration.waiting_for_photo, F.photo)
-async def process_photo(message: types.Message, state: FSMContext):
-    await state.update_data(photo=message.photo[-1].file_id)
-    await message.answer("📝 <b>Напиши кілька слів про себе</b>\n\nЩо любиш, кого шукаєш, у якому ти місті. Це останній крок 🙂", parse_mode="HTML")
+MEDIA_PROMPT = ("📸 <b>Надішли до 3 фото або відео</b> (до 60 с)\n\n"
+                "Можна одразу кількома. Вертикальні фото виглядають найкраще. Обличчя має бути добре видно — анкети з чужими фото видаляються.\n"
+                "📎 Скріпка → Фото або Відео.")
+PENDING_MEDIA = {}   # uid -> фото/відео, які людина надсилає зараз (альбом приходить кількома повідомленнями)
+_media_ack = {}
+
+async def collect_media(message, state, on_done):
+    uid = str(message.from_user.id)
+    m = media_of_message(message)
+    if m and m["t"] == "video" and (message.video.duration or 0) > 60:
+        return await message.answer("❌ Відео до 60 секунд")
+    lst = PENDING_MEDIA.setdefault(uid, [])
+    if m and len(lst) < MAX_MEDIA:
+        lst.append(m)
+    if len(lst) >= MAX_MEDIA:
+        if _media_ack.get(uid) != "done":
+            _media_ack[uid] = "done"
+            await on_done(message, state, PENDING_MEDIA.pop(uid))
+            _media_ack.pop(uid, None)
+        return
+    if _media_ack.get(uid):  # відповідаємо один раз на весь альбом
+        return
+    _media_ack[uid] = "wait"
+    await asyncio.sleep(1.2)
+    if _media_ack.get(uid) != "wait":
+        return
+    _media_ack.pop(uid, None)
+    n = len(PENDING_MEDIA.get(uid, []))
+    if n and n < MAX_MEDIA:
+        await message.answer(f"✅ Додано {n} з {MAX_MEDIA}. Надішли ще або натисни «{DONE_MEDIA}»", reply_markup=reply_kb([[DONE_MEDIA]]))
+
+async def media_done_button(message, state, on_done):
+    uid = str(message.from_user.id)
+    if message.text == DONE_MEDIA and PENDING_MEDIA.get(uid):
+        return await on_done(message, state, PENDING_MEDIA.pop(uid))
+    await message.answer(MEDIA_PROMPT, parse_mode="HTML")
+
+async def reg_media_done(message, state, media):
+    await state.update_data(media=media)
+    await message.answer("📝 <b>Розкажи про себе</b>\n\nХто ти, кого хочеш знайти, чим пропонуєш зайнятися. Це допоможе краще підібрати тобі пару 🙂",
+                         parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(Registration.waiting_for_about)
 
+@dp.message(Registration.waiting_for_photo, F.photo | F.video)
+async def process_photo(message: types.Message, state: FSMContext):
+    await collect_media(message, state, reg_media_done)
+
 @dp.message(Registration.waiting_for_photo)
-async def photo_error(message: types.Message):
-    await message.answer("❌ <b>Потрібне саме фото</b>\n\n📎 Скріпка → Фото.", parse_mode="HTML")
+async def photo_error(message: types.Message, state: FSMContext):
+    await media_done_button(message, state, reg_media_done)
 
 @dp.message(Registration.waiting_for_about)
 async def process_about(message: types.Message, state: FSMContext):
@@ -879,16 +1009,25 @@ async def process_about(message: types.Message, state: FSMContext):
         user_id = str(message.from_user.id)
         referrer = data.get("referrer")
         now = int(time.time())
-        profile = {
-            "tg_id": user_id,
+        core = {
             "username": message.from_user.username or "",
             "name": data["name"],
             "age": data["age"],
             "country": data["country"],
+            "city": data.get("city", ""),
             "gender": data["gender"],
             "search": data["search"],
-            "photo": data["photo"],
             "about": about[:700],
+            **media_fields(data["media"]),
+        }
+        if data.get("redo"):
+            # «заповнити заново»: лайки, Преміум і історія зберігаються
+            await update_user(user_id, core)
+            await state.set_state(Registration.waiting_for_hometown)
+            return await message.answer("🏠 <b>Звідки ти родом в Україні?</b>", parse_mode="HTML", reply_markup=hometown_kb())
+        profile = {
+            "tg_id": user_id,
+            **core,
             "registered_at": firestore.SERVER_TIMESTAMP,
             "search_filters": {"country": None, "min_age": None, "max_age": None},
             "lat": None,
@@ -940,14 +1079,27 @@ async def finish_registration(message: types.Message, state: FSMContext):
     await state.clear()
     user_id = str(message.from_user.id)
     p = await get_user(user_id)
-    await message.answer("🎉 <b>Анкету створено!</b> Ось як її бачать інші:", parse_mode="HTML", reply_markup=get_main_menu())
+    await message.answer("Так виглядає твоя анкета:", reply_markup=get_main_menu())
     if p:
-        await safe_send_photo(message.chat.id, p["photo"], caption=card_text(p, own=True), parse_mode="HTML")
+        await send_media(message.chat.id, media_list(p)[0], card_text(p, own=True), silent=False)
+        await message.answer("Все вірно?", reply_markup=ikb([[("✅ Так, все вірно", "reg:ok"), ("✏️ Змінити анкету", "reg:edit")]]))
     if p and p.get("likes_view_until", 0) > time.time():
         await message.answer(f"🎁 Тебе запросив друг — «Хто мене лайкнув?» відкрито на {premium_minutes()} хв.")
     if not message.from_user.username:
         await message.answer("💡 Додай нікнейм у Telegram (Налаштування → Ім'я користувача), щоб після взаємної симпатії тобі могли написати.")
-    await message.answer("Натисни «👥 Дивитися анкети», щоб почати 👇")
+
+@dp.callback_query(F.data.startswith("reg:"))
+async def reg_confirm(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    uid = str(callback.from_user.id)
+    if callback.data == "reg:edit":
+        return await send_me(callback.message.chat.id, uid)
+    await callback.message.answer("🔥 Чудово! Починаємо 👇")
+    await show_next(uid, callback.message.chat.id)
 
 @dp.message(Registration.waiting_for_location, F.location)
 async def process_location(message: types.Message, state: FSMContext):
@@ -1064,6 +1216,7 @@ def me_kb(p):
     return ikb([
         [("📷 Фото", "me:photo"), ("📝 Про себе", "me:about")],
         [("👤 Ім'я", "me:name"), ("🎂 Вік", "me:age")],
+        [("🏙 Місто", "me:city"), ("🔄 Заповнити заново", "me:redo")],
         [("🌍 Країна", "me:country"), ("📍 Локація", "me:loc")],
         [("🏠 Звідки родом", "me:home"), ("☕️ Сьогодні вільний(-а) ✓" if is_free(p) else "☕️ Вільний(-а) сьогодні", "me:coffee")],
         [("▶️ Увімкнути анкету", "me:resume") if p.get("paused") else ("⏸ Пауза", "me:pause"), ("🗑 Видалити", "me:del")],
@@ -1076,7 +1229,10 @@ async def send_me(chat_id, uid, note=None):
     cap = (note + "\n\n" if note else "") + card_text(p, own=True)
     if p.get("paused"):
         cap += "\n\n⏸ <i>Анкета на паузі — її ніхто не бачить.</i>"
-    await safe_send_photo(chat_id, p["photo"], caption=cap[:1024], parse_mode="HTML", reply_markup=me_kb(p))
+    media = media_list(p)
+    if len(media) > 1:
+        cap += f"\n📷 У анкеті {len(media)} фото/відео"
+    await send_media(chat_id, media[0], cap[:1024], me_kb(p), silent=False)
 
 @dp.message(F.text.in_([B_ME] + OLD_ME))
 async def menu_profile(message: types.Message, state: FSMContext):
@@ -1091,7 +1247,8 @@ async def cmd_profile(message: types.Message, state: FSMContext):
     await menu_profile(message, state)
 
 EDIT_PROMPTS = {
-    "photo": (EditProfile.photo, "📷 Надішли нове фото"),
+    "photo": (EditProfile.photo, "📷 Надішли до 3 нових фото або відео — вони замінять поточні"),
+    "city": (EditProfile.city, "🏙 З якого ти міста?"),
     "about": (EditProfile.about, "📝 Напиши новий текст про себе"),
     "name": (EditProfile.name, "👤 Як тебе звати?"),
     "age": (EditProfile.age, "🎂 Скільки тобі років?"),
@@ -1104,7 +1261,16 @@ async def me_callback(callback: types.CallbackQuery, state: FSMContext):
     uid = str(callback.from_user.id)
     act = callback.data.split(":")
     await callback.answer()
+    if act[1] == "redo":
+        await state.clear()
+        await state.update_data(redo=True)
+        await state.set_state(Registration.waiting_for_name)
+        name = (callback.from_user.first_name or "").strip()[:30]
+        return await callback.message.answer("🔄 Заповнимо анкету заново (лайки й симпатії збережуться).\n\n👋 <b>Як тебе звати?</b>", parse_mode="HTML",
+                                             reply_markup=reply_kb([[name]]) if len(name) >= 2 else types.ReplyKeyboardRemove())
     if act[1] in EDIT_PROMPTS:
+        if act[1] == "photo":
+            PENDING_MEDIA.pop(uid, None)
         st, prompt = EDIT_PROMPTS[act[1]]
         await state.set_state(st)
         kb = location_kb() if act[1] == "loc" else hometown_kb() if act[1] == "home" else ikb([[("✖️ Скасувати", "me:cancel")]])
@@ -1155,13 +1321,23 @@ async def edit_done(message, state, fields):
     await message.answer("✅ Збережено", reply_markup=get_main_menu())
     await send_me(message.chat.id, str(message.from_user.id))
 
-@dp.message(EditProfile.photo, F.photo)
+async def edit_media_done(message, state, media):
+    await edit_done(message, state, media_fields(media))
+
+@dp.message(EditProfile.photo, F.photo | F.video)
 async def edit_photo(message: types.Message, state: FSMContext):
-    await edit_done(message, state, {"photo": message.photo[-1].file_id})
+    await collect_media(message, state, edit_media_done)
 
 @dp.message(EditProfile.photo)
-async def edit_photo_err(message: types.Message):
-    await message.answer("❌ Потрібне фото: 📎 Скріпка → Фото")
+async def edit_photo_err(message: types.Message, state: FSMContext):
+    await media_done_button(message, state, edit_media_done)
+
+@dp.message(EditProfile.city)
+async def edit_city(message: types.Message, state: FSMContext):
+    city = clean_town(message.text)
+    if not city:
+        return await message.answer("❌ Напиши назву міста")
+    await edit_done(message, state, {"city": city})
 
 @dp.message(EditProfile.about)
 async def edit_about(message: types.Message, state: FSMContext):
@@ -1265,8 +1441,8 @@ async def show_likes(chat_id, uid):
         p = await get_user(like.id)
         if not visible(p):
             continue
-        await safe_send_photo(chat_id, p["photo"], caption=card_text(p, me), parse_mode="HTML", disable_notification=True,
-                              reply_markup=ikb([[("❤️ Взаємно", f"lk:y:{like.id}"), ("👎", f"lk:n:{like.id}")]]))
+        await send_media(chat_id, media_list(p)[0], card_text(p, me, note=(like.to_dict() or {}).get("msg", "")),
+                         ikb([[("❤️ Взаємно", f"lk:y:{like.id}"), ("👎", f"lk:n:{like.id}")]]))
         await asyncio.sleep(0.2)
 
 @dp.message(F.text.in_([B_LIKES] + OLD_LIKES))
@@ -1476,6 +1652,67 @@ async def cmd_admin(message: types.Message):
     await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
 
 # =========================================================
+# НАГАДУВАННЯ (як у Дайвінчику): «ти сподобався N людям», «з'явились нові анкети»
+# =========================================================
+def _ts(v):
+    try:
+        return v.timestamp() if hasattr(v, "timestamp") else float(v or 0)
+    except Exception:
+        return 0.0
+
+async def nudge_once(limit=300):
+    now = time.time()
+    docs = await asyncio.to_thread(lambda: list(db.collection("users").stream()))
+    sent = 0
+    for d in docs:
+        if sent >= limit:
+            break
+        u = d.to_dict() or {}
+        if u.get("banned") or u.get("blocked_bot") or u.get("paused") or d.id in BANNED:
+            continue
+        idle = now - (_ts(u.get("last_active")) or now)
+        last = float(u.get("last_nudge") or 0)
+        if idle < 86400 or now - last < 2 * 86400:
+            continue
+        try:
+            n = len(list(await asyncio.to_thread(lambda: user_ref(d.id).collection("likes").limit(50).get())))
+        except Exception:
+            n = 0
+        if n:
+            text, kb = f"❤️ Поки тебе не було, ти сподобався(-лась) <b>{people(n)}</b>! Подивимось?", ikb([[("👀 Показати", "f:more")]])
+        elif idle >= 4 * 86400 and now - last >= 7 * 86400:
+            text, kb = (f"👋 Давно не бачились! У {esc(u.get('city') or u.get('country') or 'твоєму місті')} з'явились нові анкети. Подивимось?",
+                        ikb([[("👥 Дивитися анкети", "f:more")]]))
+        else:
+            continue
+        try:
+            await bot.send_message(d.id, text, parse_mode="HTML", reply_markup=kb)
+            await update_user(d.id, {"last_nudge": int(now)})
+            sent += 1
+        except TelegramForbiddenError:
+            await update_user(d.id, {"blocked_bot": True})
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+        except Exception as e:
+            logging.info(f"nudge {d.id}: {e}")
+        await asyncio.sleep(0.06)
+    return sent
+
+async def nudge_loop():
+    await asyncio.sleep(300)
+    while True:
+        try:
+            # нагадуємо вдень, а не вночі (за часом Іспанії/Польщі/Німеччини)
+            hour = time.gmtime().tm_hour
+            if SETTINGS.get("nudges", True) and 8 <= hour <= 18:
+                n = await nudge_once()
+                if n:
+                    logging.info(f"🔔 Нагадувань надіслано: {n}")
+        except Exception as e:
+            logging.error(f"nudge_loop: {e}")
+        await asyncio.sleep(3600)
+
+# =========================================================
 # POOLING & RUN
 # =========================================================
 async def main():
@@ -1485,6 +1722,7 @@ async def main():
         await load_settings()
         await load_banned()
         asyncio.create_task(settings_watcher())
+        asyncio.create_task(nudge_loop())
         await start_admin(Ctx(db, bot, SETTINGS, save_settings, admin_ids, on_ban))
     
     try:
