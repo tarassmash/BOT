@@ -25,7 +25,7 @@ DISCLAIMER_TEXT = (
     "• Бот — лише технічна платформа для знайомств. Адміністрація не відповідає за зміст анкет, "
     "слова та дії інших людей і за зустрічі в реальному житті.\n"
     "• Будь обережним(-ою): не надсилай гроші, не діли документи й коди з SMS, перші зустрічі — у людних місцях.\n"
-    "• Побачив(-ла) фейк, спам чи образи — тисни 🚨 під анкетою, модератор перевірить.\n\n"
+    "• Побачив(-ла) фейк, спам чи образи — відкрий «☰ Ще» → «🚨 Скарга», модератор перевірить.\n\n"
     "Продовжуючи, ти погоджуєшся з цим."
 )
 
@@ -426,10 +426,10 @@ def card_text(p, me=None, incoming=False, own=False, note=""):
 
 def feed_kb(cid, incoming):
     i = "1" if incoming else "0"
-    return ikb([
-        [("❤️", f"f:l:{cid}:{i}"), ("💌", f"f:sl:{cid}:{i}"), ("👎", f"f:n:{cid}:{i}")],
-        [("🚨 Скарга", f"f:r:{cid}:{i}"), ("💤 Пауза", "f:s")],
-    ])
+    return ikb([[("❤️ Лайк", f"f:l:{cid}:{i}"), ("👎 Далі", f"f:n:{cid}:{i}")]])
+
+# остання показана анкета кожного користувача — для суперлайку і скарги з меню «☰ Ще»
+CURRENT = {}
 
 REPORT_REASONS = {
     "fake": "Фейк / чуже фото",
@@ -496,17 +496,20 @@ async def find_next(user_id):
     await firebase_set(ref.collection("seen").document(p["tg_id"]), {"ts": firestore.SERVER_TIMESTAMP})
     return p, False, me
 
-async def show_next(user_id, chat_id, msg=None):
+async def show_next(user_id, chat_id, msg=None, mid=None):
     """Показує наступну анкету. Якщо є повідомлення з попередньою — міняє його на місці (без нового повідомлення і звуку)."""
     try:
         p, incoming, me = await find_next(user_id)
     except Exception as e:
         logging.error(f"find_next: {e}")
         return await safe_send_message(chat_id, "⚠️ Не вдалося завантажити анкети. Спробуй ще раз за хвилину.", reply_markup=get_main_menu())
+    if msg and msg.photo:
+        mid = msg.message_id
     if p is None:
-        if msg:
+        CURRENT.pop(str(user_id), None)
+        if mid:
             try:
-                await msg.delete()
+                await bot.delete_message(chat_id, mid)
             except Exception:
                 pass
         if incoming == "noprofile":
@@ -516,16 +519,22 @@ async def show_next(user_id, chat_id, msg=None):
         return await safe_send_message(chat_id, f"😔 <b>Нових анкет поки немає.</b>\n\n{hint}", parse_mode="HTML", disable_notification=True,
                                        reply_markup=ikb([[("⚙️ Фільтри", "flt:open"), ("🔄 Ще раз", "f:more")]]))
     caption, kb = card_text(p, me, incoming, note=p.get("_note", "")), feed_kb(p["tg_id"], incoming)
-    if msg and msg.photo:
+    CURRENT[str(user_id)] = {"cid": p["tg_id"], "i": incoming, "name": p.get("name", ""), "chat": chat_id, "mid": None}
+    if mid:
         try:
-            return await msg.edit_media(types.InputMediaPhoto(media=p["photo"], caption=caption, parse_mode="HTML"), reply_markup=kb)
+            await bot.edit_message_media(chat_id=chat_id, message_id=mid, media=types.InputMediaPhoto(media=p["photo"], caption=caption, parse_mode="HTML"), reply_markup=kb)
+            CURRENT[str(user_id)]["mid"] = mid
+            return
         except Exception as e:
             logging.info(f"edit_media fallback: {e}")
             try:
-                await msg.delete()
+                await bot.delete_message(chat_id, mid)
             except Exception:
                 pass
-    return await safe_send_photo(chat_id, p["photo"], caption=caption, parse_mode="HTML", reply_markup=kb, disable_notification=True)
+    sent = await safe_send_photo(chat_id, p["photo"], caption=caption, parse_mode="HTML", reply_markup=kb, disable_notification=True)
+    if sent:
+        CURRENT[str(user_id)]["mid"] = sent.message_id
+    return sent
 
 _like_ping = {}
 
@@ -593,10 +602,14 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
         cid = parts[2]
         if act == "r":
             await callback.answer()
-            return await msg.edit_reply_markup(reply_markup=report_kb(cid, parts[3]))
+            return await msg.edit_text(f"🚨 <b>Скарга — {esc(CURRENT.get(user_id, {}).get('name', 'анкету'))}</b>\n\nЩо не так?", parse_mode="HTML", reply_markup=report_kb(cid, parts[3]))
         if act == "b":
             await callback.answer()
-            return await msg.edit_reply_markup(reply_markup=feed_kb(cid, parts[3] == "1"))
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+            return
         if act == "rr":
             reason = REPORT_REASONS.get(parts[3], REPORT_REASONS["other"])
             await asyncio.to_thread(db.collection("reports").add, {
@@ -606,7 +619,12 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
             await firebase_delete(user_ref(user_id).collection("likes").document(cid))
             asyncio.create_task(after_report(cid, user_id))
             await callback.answer("🚨 Скаргу прийнято. Модератор перевірить анкету.", show_alert=True)
-            return await show_next(user_id, msg.chat.id, msg)
+            try:
+                await msg.delete()  # повідомлення меню зі скаргою
+            except Exception:
+                pass
+            cur = CURRENT.get(user_id) or {}
+            return await show_next(user_id, msg.chat.id, mid=cur.get("mid") if cur.get("cid") == cid else None)
         incoming = parts[3] == "1"
         if act == "sl":
             me = await get_user(user_id) or {}
@@ -616,8 +634,12 @@ async def feed_callback(callback: types.CallbackQuery, state: FSMContext):
             await callback.answer()
             await state.set_state(SuperLike.message)
             await state.update_data(sl_cid=cid, sl_incoming=incoming)
-            return await msg.answer("💌 <b>Суперлайк</b>\n\nНапиши коротке повідомлення (до 200 символів) — його побачать разом з твоєю анкетою, і вона покажеться першою.",
-                                    parse_mode="HTML", reply_markup=ikb([[("✖️ Скасувати", "f:slx")]]))
+            prompt = (f"💌 <b>Суперлайк — {esc(CURRENT.get(user_id, {}).get('name', ''))}</b>\n\n"
+                      "Напиши коротке повідомлення (до 200 символів) — його побачать разом з твоєю анкетою, і вона покажеться першою.")
+            try:
+                return await msg.edit_text(prompt, parse_mode="HTML", reply_markup=ikb([[("✖️ Скасувати", "f:slx")]]))
+            except Exception:
+                return await msg.answer(prompt, parse_mode="HTML", reply_markup=ikb([[("✖️ Скасувати", "f:slx")]]))
         if act == "l":
             await callback.answer("❤️")
             if incoming:
@@ -674,7 +696,8 @@ async def superlike_message(message: types.Message, state: FSMContext):
             await safe_send_message(cid, "💌 Тобі надіслали <b>суперлайк</b> з повідомленням! Відкрий анкети — ця людина буде першою.", parse_mode="HTML",
                                     reply_markup=ikb([[("👀 Подивитися", "f:more")]]))
     await message.answer("💌 Суперлайк надіслано!", reply_markup=get_main_menu())
-    await show_next(uid, message.chat.id)
+    cur = CURRENT.get(uid) or {}
+    await show_next(uid, message.chat.id, mid=cur.get("mid") if cur.get("cid") == cid else None)
 
 # старі кнопки 👍👎💤🚨 під полем вводу — переводимо на нові
 @dp.message(F.text.in_(["👍", "👎", "💤", "🚨"]))
@@ -1276,21 +1299,27 @@ def privacy_text():
 
 HELP_TEXT = (
     "ℹ️ <b>Як це працює</b>\n\n"
-    "👥 <b>Анкети</b> — тисни ❤️ або 👎 під фото. Хто вже лайкнув тебе, показується першим.\n"
+    "👥 <b>Анкети</b> — під фото лише дві кнопки: ❤️ Лайк і 👎 Далі. Хто вже лайкнув тебе, показується першим.\n"
     "🎉 <b>Взаємна симпатія</b> — коли ви обоє тиснете ❤️, бот надсилає контакт.\n"
-    "💌 <b>Суперлайк</b> — раз на добу: лайк із коротким повідомленням, твоя анкета покажеться першою.\n"
+    "💌 <b>Суперлайк</b> і 🚨 <b>скарга</b> на анкету, яку зараз дивишся, — у меню «☰ Ще». Суперлайк — раз на добу, з коротким повідомленням.\n"
     "☕️ <b>Вільний(-а) сьогодні</b> — на 24 години анкета вище з позначкою «можна на каву».\n"
     "🏠 <b>Земляки</b> — вкажи, звідки ти родом, і бот підніме земляків та позначить 🤝.\n"
     "⚙️ <b>Фільтри</b> — країна і вік. Люди поруч — першими (якщо додати локацію).\n"
     "👤 <b>Моя анкета</b> — змінити фото, текст, вік, локацію; пауза або видалення.\n"
-    "🚨 <b>Скарга</b> — на фейки, спам чи образи; модератор перевіряє кожну.\n\n"
+    "🚨 Скарги на фейки, спам чи образи перевіряє модератор.\n\n"
     "Команди: /search — анкети, /profile — моя анкета, /likes — лайки."
 )
 
 @dp.message(F.text == B_MORE)
 async def menu_more(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer("☰ <b>Ще</b>", parse_mode="HTML", reply_markup=ikb([
+    rows = []
+    cur = CURRENT.get(str(message.from_user.id))
+    if cur and cur.get("cid"):
+        i = "1" if cur.get("i") else "0"
+        name = str(cur.get("name") or "")[:20]
+        rows += [[(f"💌 Суперлайк: {name}", f"f:sl:{cur['cid']}:{i}")], [(f"🚨 Скарга: {name}", f"f:r:{cur['cid']}:{i}")]]
+    await message.answer("☰ <b>Ще</b>", parse_mode="HTML", reply_markup=ikb(rows + [
         [("☕️ Вільний(-а) сьогодні", "me:coffee")],
         [("ℹ️ Як це працює", "more:help"), ("📜 Правила", "more:privacy")],
         [("⏸ Пауза анкети", "me:pause"), ("🗑 Видалити анкету", "me:del")],
