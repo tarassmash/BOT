@@ -549,7 +549,10 @@ class Admin:
     def app(self):
         app = web.Application(middlewares=[self.guard], client_max_size=30 * 1024 * 1024)  # фото/відео із застосунку
         r = app.router
-        r.add_get("/", lambda req: web.Response(text="ok"))
+        # корінь сайту і /app/ ведуть у застосунок — щоб працювала будь-яка адреса, вставлена в @BotFather
+        r.add_get("/", to_app)
+        r.add_get("/app/", to_app)
+        r.add_get("/health", lambda req: web.Response(text="ok"))
         r.add_get("/admin", self.page)
         r.add_post("/admin/login", self.login)
         r.add_post("/admin/logout", self.logout)
@@ -565,6 +568,10 @@ class Admin:
         r.add_post("/admin/api/settings", self.put_settings)
         r.add_get("/admin/photo/{fid}", self.photo)
         return app
+
+
+async def to_app(req):
+    raise web.HTTPFound("/app" + (("?" + req.query_string) if req.query_string else ""))
 
 
 async def start_admin(ctx: Ctx, extra=None):
