@@ -547,7 +547,7 @@ class Admin:
         return web.Response(body=self._photos[fid], content_type="image/jpeg", headers={"cache-control": "private, max-age=86400"})
 
     def app(self):
-        app = web.Application(middlewares=[self.guard], client_max_size=1024 * 1024)
+        app = web.Application(middlewares=[self.guard], client_max_size=30 * 1024 * 1024)  # фото/відео із застосунку
         r = app.router
         r.add_get("/", lambda req: web.Response(text="ok"))
         r.add_get("/admin", self.page)
