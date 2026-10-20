@@ -280,8 +280,20 @@ def get_main_menu():
 def reply_kb(rows, one_time=True):
     return types.ReplyKeyboardMarkup(keyboard=[[types.KeyboardButton(text=t) for t in r] for r in rows], resize_keyboard=True, one_time_keyboard=one_time)
 
+def _btn(t, d):
+    if d.startswith("url:"):
+        return types.InlineKeyboardButton(text=t, url=d[4:])
+    if d.startswith("app:"):
+        return types.InlineKeyboardButton(text=t, web_app=types.WebAppInfo(url=d[4:]))
+    return types.InlineKeyboardButton(text=t, callback_data=d)
+
 def ikb(rows):
-    return types.InlineKeyboardMarkup(inline_keyboard=[[types.InlineKeyboardButton(text=t, **({"url": d[4:]} if d.startswith("url:") else {"callback_data": d})) for t, d in r] for r in rows])
+    return types.InlineKeyboardMarkup(inline_keyboard=[[_btn(t, d) for t, d in r] for r in rows])
+
+def open_btn(text, tab="feed", fallback="f:more"):
+    """Кнопка, що відкриває застосунок на потрібній вкладці (або стрічку в чаті, якщо застосунок не ввімкнено)."""
+    url = app_url()
+    return (text, f"app:{url}#{tab}") if url.startswith("https://") else (text, fallback)
 
 def countries_kb(extra=None):
     cs = list(countries())
@@ -644,7 +656,7 @@ async def notify_liked(cid):
     except Exception:
         n = 1
     await safe_send_message(cid, f"❤️ Ти сподобався(-лась) <b>{people(n)}</b>! Показати?", parse_mode="HTML",
-                            reply_markup=ikb([[("👀 Показати", "f:more"), ("💤 Не зараз", "x:del")]]))
+                            reply_markup=ikb([[open_btn("👀 Показати"), ("💤 Не зараз", "x:del")]]))
 
 def people(n):
     n = max(1, int(n))
@@ -735,7 +747,7 @@ async def do_superlike(uid, cid, incoming, text):
         return True
     await firebase_set(user_ref(cid).collection("likes").document(uid), {"ts": firestore.SERVER_TIMESTAMP, "msg": text})
     await safe_send_message(cid, f"💌 Тобі надіслали <b>суперлайк</b>: «{esc(text)}»\n\nВідкрий анкети — ця людина буде першою.", parse_mode="HTML",
-                            reply_markup=ikb([[("👀 Подивитися", "f:more")]]))
+                            reply_markup=ikb([[open_btn("👀 Подивитися")]]))
     return False
 
 async def do_report(uid, cid, key):
@@ -913,6 +925,13 @@ async def cmd_start(message: types.Message, state: FSMContext):
         await state.clear()
         if referrer and referrer != user_id:
             await state.update_data(referrer=referrer)
+            # якщо людина створить анкету в застосунку — бонус за запрошення теж зарахується
+            await firebase_set(db.collection("pending_ref").document(user_id), {"ref": referrer, "ts": int(time.time())})
+        if app_url().startswith("https://"):
+            await message.answer(SETTINGS["onboarding"], parse_mode="HTML", reply_markup=ikb([
+                [open_btn("❤️ Створити анкету в застосунку", "feed")],
+                [("💬 Або заповнити тут, у чаті", "reg:chat")]]))
+            return
         a, b = random.randint(1, 9), random.randint(1, 9)
         await state.update_data(captcha_answer=a + b)
         await message.answer(f"🤖 Перевірка, що ти не бот\n\n<b>{a} + {b} = ?</b>", parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
@@ -1081,12 +1100,7 @@ async def process_about(message: types.Message, state: FSMContext):
         await firebase_set(user_ref(user_id), profile)
 
         if referrer:
-            ref = await get_user(referrer)
-            if ref:
-                until = max(now, int(ref.get("likes_view_until") or 0)) + premium_minutes() * 60
-                await update_user(referrer, {"likes_view_until": until})
-                await safe_send_message(referrer, f"🎉 Твій друг зареєструвався! «Хто мене лайкнув?» відкрито ще на {premium_minutes()} хв.",
-                                        reply_markup=ikb([[("❤️ Подивитися", "lk:show")]]))
+            await reward_referrer(referrer)
 
         await state.set_state(Registration.waiting_for_hometown)
         await message.answer("🏠 <b>Звідки ти родом в Україні?</b>\n\nЗемляків бот показує вище й позначає 🤝. Обери або напиши своє місто.",
@@ -1116,6 +1130,15 @@ async def process_hometown(message: types.Message, state: FSMContext):
     except Exception as e:
         logging.error(f"Hometown error: {e}")
 
+async def reward_referrer(referrer):
+    ref = await get_user(referrer)
+    if not ref:
+        return
+    until = max(int(time.time()), int(ref.get("likes_view_until") or 0)) + premium_minutes() * 60
+    await update_user(referrer, {"likes_view_until": until})
+    await safe_send_message(referrer, f"🎉 Твій друг зареєструвався! «Хто мене лайкнув?» відкрито ще на {premium_minutes()} хв.",
+                            reply_markup=ikb([[open_btn("❤️ Подивитися", "likes", "lk:show")]]))
+
 async def finish_registration(message: types.Message, state: FSMContext):
     await state.clear()
     user_id = str(message.from_user.id)
@@ -1128,6 +1151,16 @@ async def finish_registration(message: types.Message, state: FSMContext):
         await message.answer(f"🎁 Тебе запросив друг — «Хто мене лайкнув?» відкрито на {premium_minutes()} хв.")
     if not message.from_user.username:
         await message.answer("💡 Додай нікнейм у Telegram (Налаштування → Ім'я користувача), щоб після взаємної симпатії тобі могли написати.")
+
+@dp.callback_query(F.data == "reg:chat")
+async def reg_in_chat(callback: types.CallbackQuery, state: FSMContext):
+    await callback.answer()
+    if await get_user(callback.from_user.id):
+        return await callback.message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())
+    a, b = random.randint(1, 9), random.randint(1, 9)
+    await state.update_data(captcha_answer=a + b)
+    await state.set_state(Registration.captcha)
+    await callback.message.answer(f"🤖 Перевірка, що ти не бот\n\n<b>{a} + {b} = ?</b>", parse_mode="HTML", reply_markup=types.ReplyKeyboardRemove())
 
 @dp.callback_query(F.data.startswith("reg:"))
 async def reg_confirm(callback: types.CallbackQuery, state: FSMContext):
@@ -1448,15 +1481,18 @@ async def confirm_delete(callback: types.CallbackQuery):
         await callback.message.delete()
     except Exception:
         pass
-    ref = user_ref(callback.from_user.id)
+    await delete_profile(callback.from_user.id)
+    await callback.message.answer("❌ Анкету повністю видалено. Захочеш повернутися — натисни /start.", reply_markup=types.ReplyKeyboardRemove())
+
+async def delete_profile(uid):
+    ref = user_ref(uid)
     try:
         for sub in ("seen", "likes"):
-            for doc in await asyncio.to_thread(lambda: ref.collection(sub).get()):
+            for doc in list(await asyncio.to_thread(lambda: ref.collection(sub).get())):
                 await firebase_delete(doc.reference)
     except Exception as e:
         logging.error(f"Subcollection cleanup error: {e}")
     await firebase_delete(ref)
-    await callback.message.answer("❌ Анкету повністю видалено. Захочеш повернутися — натисни /start.", reply_markup=types.ReplyKeyboardRemove())
 
 # =========================================================
 # LIKES
@@ -1720,10 +1756,10 @@ async def nudge_once(limit=300):
         except Exception:
             n = 0
         if n:
-            text, kb = f"❤️ Поки тебе не було, ти сподобався(-лась) <b>{people(n)}</b>! Подивимось?", ikb([[("👀 Показати", "f:more")]])
+            text, kb = f"❤️ Поки тебе не було, ти сподобався(-лась) <b>{people(n)}</b>! Подивимось?", ikb([[open_btn("👀 Показати")]])
         elif idle >= 4 * 86400 and now - last >= 7 * 86400:
             text, kb = (f"👋 Давно не бачились! У {esc(u.get('city') or u.get('country') or 'твоєму місті')} з'явились нові анкети. Подивимось?",
-                        ikb([[("👥 Дивитися анкети", "f:more")]]))
+                        ikb([[open_btn("👥 Дивитися анкети")]]))
         else:
             continue
         try:
