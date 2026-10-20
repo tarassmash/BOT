@@ -135,7 +135,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         <input type="search" id="q" placeholder="Поиск: имя, @ник, ID, текст анкеты">
         <select id="fCountry"><option value="">Все страны</option></select>
         <select id="fGender"><option value="">Все</option><option value="m">Мужчины</option><option value="f">Женщины</option></select>
-        <select id="fStatus"><option value="">Любой статус</option><option value="reported">С жалобами</option><option value="hidden">Скрытые</option><option value="banned">Забаненные</option><option value="blocked">Заблокировали бота</option><option value="premium">С Премиумом</option><option value="minor">Младше 18</option></select>
+        <select id="fStatus"><option value="">Любой статус</option><option value="reported">С жалобами</option><option value="hidden">Скрытые</option><option value="banned">Забаненные</option><option value="blocked">Заблокировали бота</option><option value="premium">С Премиумом</option><option value="paused">На паузе</option><option value="minor">Младше 18</option></select>
         <select id="fSort"><option value="new">Сначала новые</option><option value="active">Недавно активные</option><option value="reports">Больше жалоб</option></select>
       </div>
       <p class="muted" id="usersInfo" style="margin:0 0 10px;font-size:14px"></p>
@@ -304,7 +304,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     $("users").innerHTML = r.items.length ? "" : `<p class="empty" style="grid-column:1/-1">Ничего не найдено</p>`;
     r.items.forEach(u => {
       const b = document.createElement("button"); b.className = "u"; b.type = "button";
-      const tags = [u.banned && `<span class="tag bad">бан</span>`, u.hidden && `<span class="tag warn">скрыта</span>`, u.reports && `<span class="tag bad">🚨 ${u.reports}</span>`, u.age < 18 && `<span class="tag bad">${u.age} лет</span>`, u.premium && `<span class="tag blue">💎</span>`, u.blocked && `<span class="tag">бот заблокирован</span>`].filter(Boolean).join("");
+      const tags = [u.banned && `<span class="tag bad">бан</span>`, u.hidden && `<span class="tag warn">скрыта</span>`, u.reports && `<span class="tag bad">🚨 ${u.reports}</span>`, u.age < 18 && `<span class="tag bad">${u.age} лет</span>`, u.premium && `<span class="tag blue">💎</span>`, u.blocked && `<span class="tag">бот заблокирован</span>`, u.paused && `<span class="tag">пауза</span>`, u.free && `<span class="tag good">☕️</span>`].filter(Boolean).join("");
       b.innerHTML = `<div class="ph">${u.photo ? `<img src="${photo(u.photo)}" alt="" loading="lazy">` : ""}<div class="tags">${tags}</div></div><div class="t"><b>${esc(u.name)}, ${esc(u.age)}</b><span>${u.gender === "m" ? "👱‍♂️" : "👩"} ${esc(u.country)}${u.location ? " · 📍" : ""}</span><span>${u.username ? "@" + esc(u.username) + " · " : ""}${ago(u.active)}</span></div>`;
       b.onclick = () => openUser(u.id);
       $("users").appendChild(b);
@@ -329,6 +329,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             <dt>Telegram</dt><dd>${u.username ? `<a href="https://t.me/${esc(u.username)}" target="_blank">@${esc(u.username)}</a>` : "<span class='muted'>без ника</span>"} · <span class="mono">${esc(u.id)}</span></dd>
             <dt>Пол / ищет</dt><dd>${u.gender === "m" ? "мужчина" : "женщина"} · ${esc(u.search)}</dd>
             <dt>Страна</dt><dd>${esc(u.country)}${u.location ? " · 📍 есть геолокация" : ""}</dd>
+            <dt>Родом</dt><dd>${esc(u.hometown) || "—"}${u.free ? " · ☕️ свободен сегодня" : ""}${u.paused ? " · ⏸ анкета на паузе" : ""}</dd>
             <dt>Фильтры</dt><dd>${esc(f.country || "своя страна")} · ${f.min_age || f.max_age ? `${esc(f.min_age || 18)}–${esc(f.max_age || 70)} лет` : "любой возраст"}</dd>
             <dt>Регистрация</dt><dd>${date(u.registered)}${u.referrer ? ` · пригласил <a href="#" data-u="${esc(u.referrer)}">${esc(u.referrerName || u.referrer)}</a>` : ""}</dd>
             <dt>Активность</dt><dd>${ago(u.active)}</dd>
