@@ -271,17 +271,15 @@ def app_on():
 
 def get_main_menu():
     if app_on():
-        # усе — у застосунку: під полем вводу лише одна велика кнопка
-        return types.ReplyKeyboardMarkup(keyboard=[[app_button()]], resize_keyboard=True, is_persistent=True,
-                                         input_field_placeholder="Відкрий застосунок ❤️")
+        # усе — у застосунку. Кнопку під полем вводу прибираємо: застосунок з такої кнопки Telegram відкриває
+        # без даних користувача (порожній екран). Відкривається кнопкою «❤️ Знайомства» зліва від поля вводу.
+        return types.ReplyKeyboardRemove()
     kb = [
         [types.KeyboardButton(text=B_FEED)],
         [types.KeyboardButton(text=B_LIKES), types.KeyboardButton(text=B_ME)],
         [types.KeyboardButton(text=B_FILTERS), types.KeyboardButton(text=B_INVITE)],
         [types.KeyboardButton(text=B_MORE)],
     ]
-    if app_button():
-        kb.insert(0, [app_button()])
     return types.ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True, is_persistent=True, input_field_placeholder="Обери дію 👇")
 
 def reply_kb(rows, one_time=True):
@@ -925,8 +923,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
         if await get_user(user_id):
             await state.clear()
             if app_on():
-                await message.answer("❤️", reply_markup=get_main_menu())  # клавіатура з кнопкою застосунку
-                return await message.answer(f"{SETTINGS['welcome_back']}\n\nАнкети, лайки й симпатії — у застосунку 👇",
+                await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())  # прибирає стару клавіатуру
+                return await message.answer("Анкети, лайки й симпатії — у застосунку 👇\nАбо кнопка «❤️ Знайомства» зліва від поля вводу.",
                                             reply_markup=ikb([[open_btn("❤️ Відкрити знайомства", "feed")]]))
             return await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())
         await state.clear()
@@ -935,7 +933,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
             # якщо людина створить анкету в застосунку — бонус за запрошення теж зарахується
             await firebase_set(db.collection("pending_ref").document(user_id), {"ref": referrer, "ts": int(time.time())})
         if app_on():
-            await message.answer("👋", reply_markup=get_main_menu())
+            await message.answer("👋 Привіт!", reply_markup=get_main_menu())
             await message.answer(SETTINGS["onboarding"], parse_mode="HTML", reply_markup=ikb([
                 [open_btn("❤️ Створити анкету", "feed")],
                 [("💬 Заповнити в чаті", "reg:chat")]]))
