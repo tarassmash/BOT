@@ -363,7 +363,14 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       return await new Promise(r => cv.toBlob(b => r(b || file), "image/jpeg", 0.86));
     } catch { return file; }
   }
+  // якщо застосунок відкрили за посиланням без «Почати» — просимо дозволу боту писати (потрібно для фото й сповіщень про симпатії)
+  let writeOk = !!tg?.initDataUnsafe?.user?.allows_write_to_pm;
+  function askWrite() {
+    if (writeOk || !tg?.requestWriteAccess) return Promise.resolve(true);
+    return new Promise(res => tg.requestWriteAccess(g => { writeOk = !!g; res(writeOk); }));
+  }
   async function uploadFile(file) {
+    if (!(await askWrite())) throw new Error("Дозволь боту писати тобі — так ми збережемо фото й повідомимо про симпатії");
     if (file.type.startsWith("video/") && file.size > 20 * 1024 * 1024) throw new Error("Відео завелике (до 20 МБ, до 60 с)");
     const fd = new FormData(); fd.append("file", await compress(file), file.name || "photo.jpg");
     const r = await fetch("/app/api/upload", { method: "POST", headers: H, body: fd });

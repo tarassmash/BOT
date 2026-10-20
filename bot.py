@@ -16,7 +16,7 @@ from aiogram import BaseMiddleware
 import firebase_admin
 from firebase_admin import credentials, firestore
 from admin import Ctx, start_admin
-from webapp import MiniApp, app_url
+from webapp import MiniApp, app_url, ref_link, main_app
 import sys
 
 # =========================================================
@@ -266,7 +266,14 @@ def app_button():
     url = app_url()
     return types.KeyboardButton(text="📱 Відкрити застосунок", web_app=types.WebAppInfo(url=url)) if url.startswith("https://") else None
 
+def app_on():
+    return app_url().startswith("https://")
+
 def get_main_menu():
+    if app_on():
+        # усе — у застосунку: під полем вводу лише одна велика кнопка
+        return types.ReplyKeyboardMarkup(keyboard=[[app_button()]], resize_keyboard=True, is_persistent=True,
+                                         input_field_placeholder="Відкрий застосунок ❤️")
     kb = [
         [types.KeyboardButton(text=B_FEED)],
         [types.KeyboardButton(text=B_LIKES), types.KeyboardButton(text=B_ME)],
@@ -917,20 +924,21 @@ async def cmd_start(message: types.Message, state: FSMContext):
         referrer = args[0][4:] if args and args[0].startswith("ref_") else None
         if await get_user(user_id):
             await state.clear()
-            await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())
-            if app_url().startswith("https://"):
-                await message.answer("📱 Анкети на весь екран — у застосунку прямо в Telegram:", reply_markup=types.InlineKeyboardMarkup(
-                    inline_keyboard=[[types.InlineKeyboardButton(text="❤️ Відкрити застосунок", web_app=types.WebAppInfo(url=app_url()))]]))
-            return
+            if app_on():
+                await message.answer("❤️", reply_markup=get_main_menu())  # клавіатура з кнопкою застосунку
+                return await message.answer(f"{SETTINGS['welcome_back']}\n\nАнкети, лайки й симпатії — у застосунку 👇",
+                                            reply_markup=ikb([[open_btn("❤️ Відкрити знайомства", "feed")]]))
+            return await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())
         await state.clear()
         if referrer and referrer != user_id:
             await state.update_data(referrer=referrer)
             # якщо людина створить анкету в застосунку — бонус за запрошення теж зарахується
             await firebase_set(db.collection("pending_ref").document(user_id), {"ref": referrer, "ts": int(time.time())})
-        if app_url().startswith("https://"):
+        if app_on():
+            await message.answer("👋", reply_markup=get_main_menu())
             await message.answer(SETTINGS["onboarding"], parse_mode="HTML", reply_markup=ikb([
-                [open_btn("❤️ Створити анкету в застосунку", "feed")],
-                [("💬 Або заповнити тут, у чаті", "reg:chat")]]))
+                [open_btn("❤️ Створити анкету", "feed")],
+                [("💬 Заповнити в чаті", "reg:chat")]]))
             return
         a, b = random.randint(1, 9), random.randint(1, 9)
         await state.update_data(captcha_answer=a + b)
@@ -1507,7 +1515,7 @@ async def show_likes(chat_id, uid):
         return await safe_send_message(chat_id, "😔 Поки нових лайків немає.\n\nПорада: гарне фото з усмішкою та кілька слів про себе дають у рази більше лайків 😉",
                                        reply_markup=ikb([[("📷 Змінити фото", "me:photo"), ("📝 Про себе", "me:about")]]))
     if time.time() > int(me.get("likes_view_until") or 0):
-        link = f"https://t.me/{await bot_username()}?start=ref_{uid}"
+        link = ref_link(await bot_username(), uid)
         return await safe_send_message(chat_id,
             f"❤️ <b>Тебе лайкнули: {n}{'+' if n == 20 else ''}</b>\n\n"
             "Ці люди покажуться першими, коли відкриєш анкети 👥\n\n"
@@ -1571,7 +1579,7 @@ def share_url(link):
 async def menu_invite_friend(message: types.Message, state: FSMContext):
     await state.clear()
     user_id = str(message.from_user.id)
-    link = f"https://t.me/{await bot_username()}?start=ref_{user_id}"
+    link = ref_link(await bot_username(), user_id)
     me = await get_user(user_id) or {}
     invited = 0
     try:
@@ -1802,10 +1810,14 @@ async def main():
         asyncio.create_task(nudge_loop())
         mini = MiniApp(sys.modules[__name__])
         await start_admin(Ctx(db, bot, SETTINGS, save_settings, admin_ids, on_ban), extra=mini.setup)
-        if app_url().startswith("https://"):
+        if app_on():
             try:
                 await bot.set_chat_menu_button(menu_button=types.MenuButtonWebApp(text="❤️ Знайомства", web_app=types.WebAppInfo(url=app_url())))
-                logging.info(f"📱 Застосунок: {app_url()}")
+                # те, що людина бачить у боті ще до /start, і в профілі бота
+                await bot.set_my_description("❤️ Знайомства для українців в Іспанії, Польщі, Німеччині, Чехії та Італії.\n\n"
+                                             "Анкети людей поруч на весь екран, земляки, «вільний сьогодні» на каву. Натисни «Відкрити» або «Почати» 👇")
+                await bot.set_my_short_description("❤️ Знайомства для українців за кордоном. Відкрий застосунок 👇")
+                logging.info(f"📱 Застосунок: {app_url()}" + (" (головний — посилання ?startapp відкривають його одразу)" if main_app() else ""))
             except Exception as e:
                 logging.error(f"menu button: {e}")
         else:
