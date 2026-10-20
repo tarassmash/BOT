@@ -305,7 +305,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     r.items.forEach(u => {
       const b = document.createElement("button"); b.className = "u"; b.type = "button";
       const tags = [u.banned && `<span class="tag bad">бан</span>`, u.hidden && `<span class="tag warn">скрыта</span>`, u.reports && `<span class="tag bad">🚨 ${u.reports}</span>`, u.age < 18 && `<span class="tag bad">${u.age} лет</span>`, u.premium && `<span class="tag blue">💎</span>`, u.blocked && `<span class="tag">бот заблокирован</span>`, u.paused && `<span class="tag">пауза</span>`, u.free && `<span class="tag good">☕️</span>`].filter(Boolean).join("");
-      b.innerHTML = `<div class="ph">${u.photo ? `<img src="${photo(u.photo)}" alt="" loading="lazy">` : ""}<div class="tags">${tags}</div></div><div class="t"><b>${esc(u.name)}, ${esc(u.age)}</b><span>${u.gender === "m" ? "👱‍♂️" : "👩"} ${esc(u.country)}${u.location ? " · 📍" : ""}</span><span>${u.username ? "@" + esc(u.username) + " · " : ""}${ago(u.active)}</span></div>`;
+      b.innerHTML = `<div class="ph">${u.photo ? `<img src="${photo(u.photo)}" alt="" loading="lazy">` : ""}<div class="tags">${tags}</div></div><div class="t"><b>${esc(u.name)}, ${esc(u.age)}</b><span>${u.gender === "m" ? "👱‍♂️" : "👩"} ${esc(u.city ? u.city + ", " : "")}${esc(u.country)}${u.location ? " · 📍" : ""}</span><span>${u.username ? "@" + esc(u.username) + " · " : ""}${ago(u.active)}</span></div>`;
       b.onclick = () => openUser(u.id);
       $("users").appendChild(b);
     });
@@ -328,7 +328,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           <dl class="kv">
             <dt>Telegram</dt><dd>${u.username ? `<a href="https://t.me/${esc(u.username)}" target="_blank">@${esc(u.username)}</a>` : "<span class='muted'>без ника</span>"} · <span class="mono">${esc(u.id)}</span></dd>
             <dt>Пол / ищет</dt><dd>${u.gender === "m" ? "мужчина" : "женщина"} · ${esc(u.search)}</dd>
-            <dt>Страна</dt><dd>${esc(u.country)}${u.location ? " · 📍 есть геолокация" : ""}</dd>
+            <dt>Город</dt><dd>${esc(u.city) || "—"}, ${esc(u.country)}${u.location ? " · 📍 есть геолокация" : ""}${u.mediaCount > 1 ? ` · 📷 ${u.mediaCount} фото/видео` : ""}</dd>
             <dt>Родом</dt><dd>${esc(u.hometown) || "—"}${u.free ? " · ☕️ свободен сегодня" : ""}${u.paused ? " · ⏸ анкета на паузе" : ""}</dd>
             <dt>Фильтры</dt><dd>${esc(f.country || "своя страна")} · ${f.min_age || f.max_age ? `${esc(f.min_age || 18)}–${esc(f.max_age || 70)} лет` : "любой возраст"}</dd>
             <dt>Регистрация</dt><dd>${date(u.registered)}${u.referrer ? ` · пригласил <a href="#" data-u="${esc(u.referrer)}">${esc(u.referrerName || u.referrer)}</a>` : ""}</dd>

@@ -149,6 +149,8 @@ class Admin:
             "referrer": u.get("referred_by", ""),
             "reports": u.get("reports_count", 0),
             "hometown": u.get("hometown", ""),
+            "city": u.get("city", ""),
+            "mediaCount": len(u.get("media") or []) or (1 if u.get("photo") else 0),
             "free": int(u.get("free_until") or 0) > now,
             "paused": bool(u.get("paused")),
         }
