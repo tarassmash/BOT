@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Знайомства</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root {
+  --bg: var(--tg-theme-bg-color, #111418);
+  --bg2: var(--tg-theme-secondary-bg-color, #1b2026);
+  --text: var(--tg-theme-text-color, #f2f4f6);
+  --hint: var(--tg-theme-hint-color, #8d97a3);
+  --accent: var(--tg-theme-button-color, #e0446a);
+  --accent-text: var(--tg-theme-button-text-color, #fff);
+  --line: color-mix(in srgb, var(--text) 12%, transparent);
+  --like: #ff4d6d; --skip: #8d97a3;
+  --safe-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
+  --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
+  --vh: var(--tg-viewport-stable-height, 100dvh);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overscroll-behavior: none; }
+body { display: flex; flex-direction: column; height: var(--vh); padding-top: var(--safe-top); overflow: hidden; user-select: none; -webkit-user-select: none; }
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+input, textarea, select { font: inherit; color: var(--text); background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; width: 100%; user-select: text; -webkit-user-select: text; }
+textarea { resize: none; min-height: 96px; }
+.view { flex: 1; min-height: 0; display: none; flex-direction: column; }
+.view.on { display: flex; }
+.scroll { flex: 1; overflow-y: auto; padding: 14px 16px 20px; -webkit-overflow-scrolling: touch; }
+
+/* стрічка */
+#feed { padding: 8px 8px 0; }
+.stage { flex: 1; min-height: 0; position: relative; }
+.card { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; background: #000; touch-action: none; will-change: transform; }
+.card img, .card video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.bars { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 4px; z-index: 2; }
+.bars i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.35); }
+.bars i.on { background: #fff; }
+.info-btn { position: absolute; top: 18px; right: 12px; z-index: 3; width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,.38); color: #fff; font-size: 18px; display: grid; place-items: center; backdrop-filter: blur(6px); }
+.badge-in { position: absolute; top: 18px; left: 12px; z-index: 3; width: 36px; height: 36px; border-radius: 50%; background: rgba(255,77,109,.9); display: grid; place-items: center; font-size: 17px; }
+.actions { display: flex; justify-content: center; gap: 34px; padding: 12px 0 calc(10px + var(--safe-bottom)); }
+.round { width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--bg2); box-shadow: 0 4px 16px rgba(0,0,0,.25); }
+.round:active { transform: scale(.94); }
+.round.like { background: var(--like); }
+.stage > .empty { position: absolute; inset: 0; }
+.scroll > .empty { min-height: 100%; }
+.empty { flex: 1; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--hint); }
+.empty b { display: block; color: var(--text); font-size: 20px; margin-bottom: 6px; }
+.loader { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* таби */
+.tabs { display: flex; border-top: 1px solid var(--line); background: var(--bg); padding-bottom: var(--safe-bottom); }
+.tabs button { flex: 1; padding: 8px 0 7px; display: grid; justify-items: center; gap: 1px; color: var(--hint); font-size: 11.5px; position: relative; }
+.tabs button span { font-size: 21px; line-height: 1.1; filter: grayscale(1); opacity: .7; }
+.tabs button.on { color: var(--text); }
+.tabs button.on span { filter: none; opacity: 1; }
+.tabs .dot { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: var(--like); color: #fff; font: 700 11px/17px system-ui; }
+
+/* аркуші */
+.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 20; display: none; }
+.sheet-bg.on { display: block; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 86%; overflow-y: auto; background: var(--bg); border-radius: 20px 20px 0 0; padding: 10px 18px calc(18px + var(--safe-bottom)); }
+.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 12px; }
+h2 { margin: 0 0 4px; font-size: 22px; }
+.muted { color: var(--hint); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.chip { background: var(--bg2); border-radius: 999px; padding: 5px 11px; font-size: 14px; }
+.about { white-space: pre-wrap; word-break: break-word; margin: 10px 0 14px; }
+.note { background: color-mix(in srgb, var(--like) 15%, var(--bg2)); border-radius: 12px; padding: 10px 12px; margin: 8px 0; }
+.btn { display: block; width: 100%; padding: 13px; border-radius: 12px; background: var(--bg2); font-weight: 600; text-align: center; margin-top: 8px; }
+.btn.primary { background: var(--accent); color: var(--accent-text); }
+.btn.danger { color: #ff6b6b; }
+.list-btn { display: block; width: 100%; text-align: left; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+
+/* лайки, симпатії */
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cell { border-radius: 14px; overflow: hidden; background: var(--bg2); text-align: left; }
+.cell .ph { aspect-ratio: 3/4; background: #000; }
+.cell .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cell .t { padding: 7px 10px 9px; font-size: 14px; }
+.big { font-size: 46px; font-weight: 800; line-height: 1; margin: 18px 0 6px; }
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.row img { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; background: var(--bg2); }
+.row .t { flex: 1; min-width: 0; }
+.row .t b { display: block; }
+.pill { padding: 8px 14px; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-weight: 600; font-size: 14px; white-space: nowrap; }
+
+/* профіль */
+.me-photo { width: 100%; aspect-ratio: 3/4; max-height: 52vh; object-fit: cover; border-radius: 16px; background: var(--bg2); display: block; }
+.field { margin: 12px 0; }
+.field label { display: block; font-size: 13px; color: var(--hint); margin: 0 0 5px 2px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); gap: 12px; }
+.toggle small { display: block; color: var(--hint); }
+.sw { width: 50px; height: 30px; border-radius: 15px; background: var(--line); position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; }
+.sw.on { background: var(--accent); }
+.sw.on::after { left: 23px; }
+.sec { margin: 22px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--hint); }
+
+/* взаємність */
+.match { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.match.on { display: flex; }
+.match img { width: 160px; height: 160px; border-radius: 50%; object-fit: cover; border: 4px solid var(--like); margin-bottom: 18px; }
+.match .btn { max-width: 320px; }
+.toast { position: fixed; left: 50%; bottom: calc(90px + var(--safe-bottom)); transform: translateX(-50%); background: rgba(0,0,0,.82); color: #fff; padding: 10px 16px; border-radius: 12px; z-index: 40; font-size: 14px; max-width: calc(100% - 32px); text-align: center; }
+</style>
+</head>
+<body>
+  <section class="view on" id="feed">
+    <div class="stage" id="stage"><div class="empty"><div class="loader"></div></div></div>
+    <div class="actions" id="actions" hidden>
+      <button class="round" id="bNope" aria-label="Далі">👎</button>
+      <button class="round like" id="bLike" aria-label="Лайк">❤️</button>
+    </div>
+  </section>
+  <section class="view" id="likes"><div class="scroll" id="likesBox"></div></section>
+  <section class="view" id="matches"><div class="scroll" id="matchesBox"></div></section>
+  <section class="view" id="profile"><div class="scroll" id="profileBox"></div></section>
+
+  <nav class="tabs" id="tabs" hidden>
+    <button data-v="feed" class="on"><span>🔥</span>Анкети</button>
+    <button data-v="likes"><span>❤️</span>Лайки<i class="dot" id="likesDot" hidden></i></button>
+    <button data-v="matches"><span>💬</span>Симпатії</button>
+    <button data-v="profile"><span>👤</span>Профіль</button>
+  </nav>
+
+  <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
+  <div class="match" id="match"></div>
+
+<script>
+(() => {
+  const tg = window.Telegram?.WebApp;
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const hap = (t = "light") => { try { tg?.HapticFeedback?.impactOccurred(t); } catch {} };
+  const ok = t => { try { tg?.HapticFeedback?.notificationOccurred(t); } catch {} };
+  function toast(m) { const d = document.createElement("div"); d.className = "toast"; d.textContent = m; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); }
+  async function api(path, body) {
+    const r = await fetch("/app/api/" + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", "x-init-data": tg?.initData || "" }, body: body ? JSON.stringify(body) : undefined });
+    let d = {}; try { d = await r.json(); } catch {}
+    if (!r.ok) throw new Error(d.error || "Помилка " + r.status);
+    return d;
+  }
+  try { tg.ready(); tg.expand(); tg.disableVerticalSwipes?.(); tg.setHeaderColor?.("bg_color"); tg.setBackgroundColor?.("bg_color"); } catch {}
+
+  let ME = null, card = null, nextCard = null, idx = 0, busy = false;
+  const plural = n => n % 10 === 1 && n % 100 !== 11 ? "людині" : "людям";
+
+  async function boot() {
+    if (!tg?.initData) { $("stage").innerHTML = `<div class="empty"><div><b>Відкрий через Telegram</b>Цей застосунок працює всередині бота.</div></div>`; return; }
+    try { ME = await api("me"); } catch (e) { $("stage").innerHTML = `<div class="empty"><div><b>Не вдалося відкрити</b>${esc(e.message)}</div></div>`; return; }
+    if (!ME.registered) {
+      $("stage").innerHTML = `<div class="empty"><div><b>Створи анкету ❤️</b>Це займе одну хвилину — у чаті з ботом.<br><br><button class="btn primary" id="reg">Створити анкету</button></div></div>`;
+      $("reg").onclick = () => { tg.openTelegramLink(`https://t.me/${ME.bot}?start=app`); tg.close(); };
+      return;
+    }
+    $("tabs").hidden = false;
+    setDot(ME.likes);
+    loadNext();
+  }
+  function setDot(n) { $("likesDot").hidden = !n; $("likesDot").textContent = n > 99 ? "99+" : n; }
+
+  // ---------- таби ----------
+  let view = "feed";
+  $("tabs").querySelectorAll("button").forEach(b => b.onclick = () => go(b.dataset.v));
+  function go(v) {
+    view = v; hap("soft");
+    $("tabs").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === v));
+    document.querySelectorAll(".view").forEach(s => s.classList.toggle("on", s.id === v));
+    if (v === "likes") renderLikes();
+    if (v === "matches") renderMatches();
+    if (v === "profile") renderProfile();
+    if (v === "feed" && !card) loadNext();
+  }
+
+  // ---------- стрічка ----------
+  async function fetchNext() { const r = await api("next"); return r.empty ? null : r.card; }
+  async function loadNext() {
+    $("actions").hidden = true;
+    if (nextCard) { card = nextCard; nextCard = null; }
+    else {
+      $("stage").innerHTML = `<div class="empty"><div class="loader"></div></div>`;
+      try { card = await fetchNext(); } catch (e) { $("stage").innerHTML = `<div class="empty"><div><b>Помилка</b>${esc(e.message)}</div></div>`; return; }
+    }
+    if (!card) {
+      $("stage").innerHTML = `<div class="empty"><div><b>Нових анкет поки немає</b>Зазирни пізніше — нові люди реєструються щодня.<br><br><button class="btn" id="toFilters">⚙️ Змінити фільтри</button><button class="btn" id="retry">🔄 Ще раз</button></div></div>`;
+      $("toFilters").onclick = () => go("profile"); $("retry").onclick = loadNext;
+      return;
+    }
+    idx = 0; renderCard();
+    // наступну анкету готуємо заздалегідь (якщо поточна не вхідний лайк — інакше сервер віддасть її ж)
+    if (!card.incoming) fetchNext().then(c => { nextCard = c; if (c?.media[0]) { const i = new Image(); i.src = c.media[0].url; } }).catch(() => {});
+  }
+  function mediaEl(m) { return m.t === "video" ? `<video src="${m.url}" autoplay muted loop playsinline></video>` : `<img src="${m.url}" alt="">`; }
+  function renderCard() {
+    const c = card, n = c.media.length;
+    $("stage").innerHTML = `<div class="card" id="card">${n > 1 ? `<div class="bars">${c.media.map((_, i) => `<i class="${i <= idx ? "on" : ""}"></i>`).join("")}</div>` : ""}
+      ${c.incoming ? `<div class="badge-in" title="Ти сподобався(-лась)">❤️</div>` : ""}
+      <button class="info-btn" id="info" aria-label="Про людину">ⓘ</button>
+      ${mediaEl(c.media[idx] || c.media[0])}</div>`;
+    $("actions").hidden = false;
+    $("info").onclick = e => { e.stopPropagation(); openInfo(); };
+    drag($("card"));
+  }
+  function drag(el) {
+    let x0 = 0, y0 = 0, dx = 0, dy = 0, down = false, moved = false;
+    el.onpointerdown = e => { if (e.target.closest(".info-btn")) return; down = true; moved = false; x0 = e.clientX; y0 = e.clientY; dx = dy = 0; el.setPointerCapture(e.pointerId); };
+    el.onpointermove = e => {
+      if (!down) return;
+      dx = e.clientX - x0; dy = e.clientY - y0;
+      if (Math.abs(dx) > 6) moved = true;
+      el.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;  // картка йде за пальцем, без анімацій і написів
+    };
+    el.onpointerup = el.onpointercancel = e => {
+      if (!down) return; down = false;
+      if (dx > 90) return act("like");
+      if (dx < -90) return act("skip");
+      el.style.transform = "";
+      if (!moved && card.media.length > 1) {   // тап: ліва/права частина — попереднє/наступне фото
+        const r = el.getBoundingClientRect();
+        idx = (e.clientX - r.left < r.width / 2) ? Math.max(0, idx - 1) : Math.min(card.media.length - 1, idx + 1);
+        renderCard(); hap("soft");
+      }
+    };
+  }
+  $("bLike").onclick = () => act("like");
+  $("bNope").onclick = () => act("skip");
+  async function act(action) {
+    if (busy || !card) return;
+    busy = true; hap(action === "like" ? "medium" : "light");
+    const c = card; card = null;
+    try {
+      const r = await api("swipe", { id: c.id, action, incoming: c.incoming });
+      if (r.match) showMatch(r.match);
+      if (c.incoming && action) { ME.likes = Math.max(0, ME.likes - 1); setDot(ME.likes); }
+    } catch (e) { toast(e.message); }
+    busy = false;
+    loadNext();
+  }
+
+  // ---------- інформація, суперлайк, скарга ----------
+  function sheet(html) { $("sheet").innerHTML = `<div class="grab"></div>` + html; $("sheetBg").classList.add("on"); tg?.BackButton?.show(); }
+  function closeSheet() { $("sheetBg").classList.remove("on"); if (!$("match").classList.contains("on")) tg?.BackButton?.hide(); }
+  $("sheetBg").onclick = e => { if (e.target.id === "sheetBg") closeSheet(); };
+  tg?.BackButton?.onClick(() => { if ($("match").classList.contains("on")) closeMatch(); else closeSheet(); });
+  function infoHtml(c) {
+    const chips = [c.dist ? `📍 ${c.dist} км` : "", c.hometown ? `🏠 ${esc(c.hometown)}${c.sameHome ? " · земляки 🤝" : ""}` : "", c.free ? "☕️ вільний(-а) сьогодні" : "", c.city ? `🌍 ${esc(c.country)}` : ""].filter(Boolean);
+    return `<h2>${esc(c.name)}, ${esc(c.age)}</h2><div class="muted">${esc(c.city || c.country)}</div>
+      ${c.incoming ? `<div class="note">❤️ Ти сподобався(-лась) цій людині</div>` : ""}
+      ${c.note ? `<div class="note">💌 «${esc(c.note)}»</div>` : ""}
+      ${chips.length ? `<div class="chips">${chips.map(x => `<span class="chip">${x}</span>`).join("")}</div>` : ""}
+      ${c.about ? `<div class="about">${esc(c.about)}</div>` : ""}`;
+  }
+  function openInfo() {
+    const c = card; if (!c) return;
+    sheet(infoHtml(c) + `<button class="btn primary" id="sl">💌 Суперлайк з повідомленням</button><button class="btn danger" id="rep">🚨 Поскаржитись</button>`);
+    $("sl").onclick = () => openSuper(c);
+    $("rep").onclick = () => openReport(c);
+  }
+  function openSuper(c) {
+    if (ME.superlikeWait > 0) { const h = Math.floor(ME.superlikeWait / 3600), m = Math.floor(ME.superlikeWait % 3600 / 60); return toast(`💌 Суперлайк — раз на добу. Наступний через ${h} год ${m} хв`); }
+    sheet(`<h2>💌 Суперлайк</h2><p class="muted">Повідомлення для ${esc(c.name)} — твоя анкета покажеться першою.</p><textarea id="slText" maxlength="200" placeholder="Привіт! Підемо на каву? ☕️"></textarea><button class="btn primary" id="slSend">Надіслати</button>`);
+    setTimeout(() => $("slText").focus(), 50);
+    $("slSend").onclick = async () => {
+      const text = $("slText").value.trim(); if (!text) return toast("Напиши повідомлення");
+      try {
+        const r = await api("superlike", { id: c.id, incoming: c.incoming, text });
+        ME.superlikeWait = 86400; closeSheet(); ok("success"); toast("💌 Суперлайк надіслано");
+        if (r.match) showMatch(r.match);
+        if (card && card.id === c.id) { card = null; loadNext(); }
+      } catch (e) { toast(e.message); }
+    };
+  }
+  function openReport(c) {
+    sheet(`<h2>🚨 Скарга</h2><p class="muted">Що не так з анкетою ${esc(c.name)}?</p>` + Object.entries(ME.reasons).map(([k, t]) => `<button class="list-btn" data-r="${k}">${esc(t)}</button>`).join(""));
+    $("sheet").querySelectorAll("[data-r]").forEach(b => b.onclick = async () => {
+      try { await api("report", { id: c.id, reason: b.dataset.r }); closeSheet(); toast("Скаргу прийнято. Модератор перевірить анкету."); if (card && card.id === c.id) { card = null; nextCard = null; loadNext(); } }
+      catch (e) { toast(e.message); }
+    });
+  }
+
+  // ---------- взаємність ----------
+  function showMatch(m) {
+    ok("success");
+    $("match").innerHTML = `${m.photo ? `<img src="${m.photo}" alt="">` : ""}<h2>Взаємна симпатія!</h2><p class="muted">Ти і ${esc(m.name)} сподобались одне одному.</p>
+      ${m.username ? `<button class="btn primary" id="mWrite">💬 Написати</button>` : `<p class="muted">Контакт ми надіслали в чат з ботом.</p>`}
+      <button class="btn" id="mNext">Дивитися далі</button>`;
+    $("match").classList.add("on"); tg?.BackButton?.show();
+    if (m.username) $("mWrite").onclick = () => tg.openTelegramLink(`https://t.me/${m.username}`);
+    $("mNext").onclick = closeMatch;
+  }
+  function closeMatch() { $("match").classList.remove("on"); if (!$("sheetBg").classList.contains("on")) tg?.BackButton?.hide(); }
+
+  // ---------- лайки ----------
+  async function renderLikes() {
+    const box = $("likesBox"); box.innerHTML = `<div class="empty"><div class="loader"></div></div>`;
+    let r; try { r = await api("likes"); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+    ME.likes = r.count; setDot(r.count);
+    if (!r.count) { box.innerHTML = `<div class="empty"><div><b>Поки нових лайків немає</b>Гарне фото з усмішкою та кілька слів про себе дають у рази більше лайків 😉</div></div>`; return; }
+    if (!r.premium) {
+      const share = `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("Знайомства для українців за кордоном ❤️")}`;
+      box.innerHTML = `<div style="text-align:center"><div class="big">${r.count}</div><div>${r.count === 1 ? "людині" : "людям"} ти сподобався(-лась)</div>
+        <p class="muted">Вони покажуться першими в «Анкетах».</p><button class="btn primary" id="toFeed">🔥 Дивитися анкети</button>
+        <p class="muted" style="margin-top:22px">Щоб одразу побачити всіх — запроси друга: ви обоє отримаєте Преміум на ${ME.premiumMinutes} хв.</p>
+        <button class="btn" id="invite">🎁 Запросити друга</button></div>`;
+      $("toFeed").onclick = () => go("feed");
+      $("invite").onclick = () => tg.openTelegramLink(share);
+      return;
+    }
+    box.innerHTML = `<h2>Тебе лайкнули: ${r.count}</h2><p class="muted">Натисни на фото, щоб відповісти.</p><div class="grid">${r.items.map((c, i) => `<button class="cell" data-i="${i}"><div class="ph"><img src="${c.media[0]?.url || ""}" alt="" loading="lazy"></div><div class="t"><b>${esc(c.name)}, ${esc(c.age)}</b><br><span class="muted">${esc(c.city || c.country)}</span></div></button>`).join("")}</div>`;
+    box.querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
+      const c = r.items[+b.dataset.i];
+      sheet(`<img src="${c.media[0]?.url || ""}" alt="" style="width:100%;border-radius:14px;max-height:50vh;object-fit:cover">` + infoHtml(c) +
+        `<div class="two"><button class="btn" id="lN">👎</button><button class="btn primary" id="lY">❤️ Взаємно</button></div>`);
+      const done = async action => { try { const x = await api("swipe", { id: c.id, action, incoming: true }); closeSheet(); b.remove(); ME.likes = Math.max(0, ME.likes - 1); setDot(ME.likes); if (x.match) showMatch(x.match); } catch (e) { toast(e.message); } };
+      $("lY").onclick = () => done("like"); $("lN").onclick = () => done("skip");
+    });
+  }
+
+  // ---------- симпатії ----------
+  async function renderMatches() {
+    const box = $("matchesBox"); box.innerHTML = `<div class="empty"><div class="loader"></div></div>`;
+    let list; try { list = await api("matches"); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+    if (!list.length) { box.innerHTML = `<div class="empty"><div><b>Поки немає симпатій</b>Коли ви обоє поставите ❤️, людина з'явиться тут.</div></div>`; return; }
+    box.innerHTML = `<h2>Симпатії</h2>` + list.map((m, i) => `<div class="row"><img src="${m.photo}" alt=""><div class="t"><b>${esc(m.name)}, ${esc(m.age)}</b><span class="muted">${esc(m.city)}</span></div>${m.username ? `<button class="pill" data-u="${esc(m.username)}">Написати</button>` : `<span class="muted" style="font-size:13px">контакт у чаті</span>`}</div>`).join("");
+    box.querySelectorAll("[data-u]").forEach(b => b.onclick = () => tg.openTelegramLink(`https://t.me/${b.dataset.u}`));
+  }
+
+  // ---------- профіль ----------
+  function renderProfile() {
+    const m = ME.me, f = ME.filters, box = $("profileBox");
+    const free = m.freeUntil * 1000 > Date.now();
+    const opt = (v, cur, label) => `<option value="${esc(v)}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${esc(label ?? v)}</option>`;
+    box.innerHTML = `
+      ${m.media[0] ? (m.media[0].t === "video" ? `<video class="me-photo" src="${m.media[0].url}" autoplay muted loop playsinline></video>` : `<img class="me-photo" src="${m.media[0].url}" alt="">`) : ""}
+      <button class="btn" id="photo">📷 Змінити фото або відео${m.media.length > 1 ? ` (зараз ${m.media.length})` : ""}</button>
+      <div class="sec">Анкета</div>
+      <div class="two"><div class="field"><label>Ім'я</label><input id="pName" maxlength="30" value="${esc(m.name)}"></div><div class="field"><label>Вік</label><input id="pAge" type="number" inputmode="numeric" min="18" max="70" value="${esc(m.age)}"></div></div>
+      <div class="two"><div class="field"><label>Країна</label><select id="pCountry">${ME.countries.map(c => opt(c, m.country)).join("")}</select></div><div class="field"><label>Місто</label><input id="pCity" maxlength="40" value="${esc(m.city)}" placeholder="Аліканте"></div></div>
+      <div class="field"><label>Звідки родом в Україні</label><input id="pHome" maxlength="40" value="${esc(m.hometown)}" placeholder="Львів"></div>
+      <div class="field"><label>Про себе</label><textarea id="pAbout" maxlength="700">${esc(m.about)}</textarea></div>
+      <button class="btn primary" id="save">Зберегти</button>
+      <div class="sec">Статус</div>
+      <div class="toggle"><div>☕️ Вільний(-а) сьогодні<small>24 години анкета вище, з позначкою «можна на каву»</small></div><button class="sw ${free ? "on" : ""}" id="tFree"></button></div>
+      <div class="toggle"><div>⏸ Пауза<small>Тебе ніхто не бачить, поки пауза увімкнена</small></div><button class="sw ${m.paused ? "on" : ""}" id="tPause"></button></div>
+      <div class="sec">Кого шукати</div>
+      <div class="field"><label>Країна пошуку</label><select id="fCountry">${opt("", f.country, `Моя (${m.country})`)}${ME.countries.map(c => opt(c, f.country)).join("")}</select></div>
+      <div class="two"><div class="field"><label>Вік від</label><input id="fMin" type="number" inputmode="numeric" min="18" max="70" value="${esc(f.min_age ?? "")}" placeholder="18"></div><div class="field"><label>до</label><input id="fMax" type="number" inputmode="numeric" min="18" max="70" value="${esc(f.max_age ?? "")}" placeholder="70"></div></div>
+      <button class="btn" id="saveF">Застосувати фільтри</button>
+      <p class="muted" style="font-size:13px;margin-top:18px">Лайки, симпатії, видалення анкети й правила — також у чаті з ботом.</p>`;
+    $("photo").onclick = async () => { try { await api("photo", {}); tg.close(); } catch (e) { toast(e.message); } };
+    $("save").onclick = async () => {
+      const body = { name: $("pName").value, age: $("pAge").value, country: $("pCountry").value, city: $("pCity").value, hometown: $("pHome").value, about: $("pAbout").value };
+      try { await api("profile", body); Object.assign(ME.me, { ...body, age: +body.age }); ok("success"); toast("✅ Збережено"); } catch (e) { toast(e.message); }
+    };
+    $("tFree").onclick = async e => { const on = !e.target.classList.contains("on"); try { await api("profile", { free: on }); e.target.classList.toggle("on", on); ME.me.freeUntil = on ? Date.now() / 1000 + 86400 : 0; hap(); } catch (x) { toast(x.message); } };
+    $("tPause").onclick = async e => { const on = !e.target.classList.contains("on"); try { await api("profile", { paused: on }); e.target.classList.toggle("on", on); ME.me.paused = on; hap(); toast(on ? "⏸ Анкету приховано" : "▶️ Анкета знову в пошуку"); } catch (x) { toast(x.message); } };
+    $("saveF").onclick = async () => {
+      const filters = { country: $("fCountry").value || null, min_age: $("fMin").value, max_age: $("fMax").value };
+      try { await api("profile", { filters }); ME.filters = { country: filters.country, min_age: +filters.min_age || null, max_age: +filters.max_age || null }; nextCard = null; card = null; ok("success"); toast("Фільтри застосовано"); go("feed"); } catch (e) { toast(e.message); }
+    };
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
