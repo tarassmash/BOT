@@ -43,6 +43,7 @@ class MiniApp:
         user = json.loads(data.get("user", "{}") or "{}")
         if not user.get("id"):
             raise web.HTTPUnauthorized(text=json.dumps({"error": "Немає користувача"}), content_type="application/json")
+        req["tg_data"] = data  # start_param тощо
         return str(user["id"]), user
 
     def sign(self, fid):
@@ -120,7 +121,7 @@ class MiniApp:
             "filters": {"country": f.get("country"), "min_age": f.get("min_age"), "max_age": f.get("max_age")},
             "likes": likes,
             "superlikeWait": int(await c.superlike_wait(uid)),
-            "ref": f"https://t.me/{bot_name}?start=ref_{uid}",
+            "ref": ref_link(bot_name, uid),
         })
 
     async def next(self, req):
@@ -340,7 +341,10 @@ class MiniApp:
             return web.json_response({"error": "Додай хоча б одне фото"}, status=400)
         pend = await c.firebase_get(c.db.collection("pending_ref").document(uid))
         referrer = ((pend.to_dict() or {}).get("ref") if pend and pend.exists else "") or ""
-        if referrer == uid:
+        sp = str(req.get("tg_data", {}).get("start_param", ""))
+        if not referrer and sp.startswith("ref_"):
+            referrer = sp[4:]  # відкрили застосунок за посиланням друга t.me/бот?startapp=ref_…
+        if referrer == uid or (referrer and not await c.get_user(referrer)):
             referrer = ""
         firestore = c.firestore
         now = int(time.time())
@@ -436,3 +440,12 @@ def app_url():
         return os.getenv("WEBAPP_URL").rstrip("/")
     dom = os.getenv("RAILWAY_PUBLIC_DOMAIN")
     return f"https://{dom}/app" if dom else ""
+
+
+def main_app():
+    """У @BotFather увімкнено «головний застосунок» — посилання t.me/бот?startapp відкривають його одразу."""
+    return os.getenv("MAIN_APP", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def ref_link(bot_name, uid):
+    return f"https://t.me/{bot_name}?startapp=ref_{uid}" if main_app() else f"https://t.me/{bot_name}?start=ref_{uid}"
