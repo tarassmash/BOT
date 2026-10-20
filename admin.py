@@ -148,6 +148,9 @@ class Admin:
             "premiumUntil": int(u.get("likes_view_until") or 0) * 1000,
             "referrer": u.get("referred_by", ""),
             "reports": u.get("reports_count", 0),
+            "hometown": u.get("hometown", ""),
+            "free": int(u.get("free_until") or 0) > now,
+            "paused": bool(u.get("paused")),
         }
 
     async def count(self, query, fallback):
@@ -237,6 +240,8 @@ class Admin:
             if st == "reported" and not u.get("reports_count"):
                 continue
             if st == "premium" and not int(u.get("likes_view_until") or 0) > time.time():
+                continue
+            if st == "paused" and not u.get("paused"):
                 continue
             if st == "minor" and not (isinstance(u.get("age"), int) and u["age"] < 18):
                 continue
