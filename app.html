@@ -174,7 +174,12 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   const plural = n => n % 10 === 1 && n % 100 !== 11 ? "людині" : "людям";
 
   async function boot() {
-    if (!tg?.initData) { $("stage").innerHTML = `<div class="empty"><div><b>Відкрий через Telegram</b>Цей застосунок працює всередині бота.</div></div>`; return; }
+    if (!tg?.initData) {
+      // відкрито не так, як треба (напр. зі старої кнопки під полем вводу або в браузері)
+      $("stage").innerHTML = `<div class="empty"><div><b>Відкрий застосунок ще раз</b>Натисни кнопку <b>«❤️ Знайомства»</b> зліва від поля вводу в чаті з ботом${tg?.platform && tg.platform !== "unknown" ? "" : " у Telegram"}.<br><br>${tg?.close ? `<button class="btn primary" id="cl">Закрити</button>` : ""}</div></div>`;
+      if ($("cl")) $("cl").onclick = () => tg.close();
+      return;
+    }
     try { ME = await api("me"); } catch (e) { $("stage").innerHTML = `<div class="empty"><div><b>Не вдалося відкрити</b>${esc(e.message)}</div></div>`; return; }
     if (!ME.registered) return wizard();
     $("tabs").hidden = false;
