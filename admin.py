@@ -218,7 +218,17 @@ class Admin:
             "days": days,
             "topRef": [{"id": k, "name": names.get(k, ""), "n": n} for k, n in sorted(refs.items(), key=lambda x: -x[1])[:10]],
             "adminIds": sorted(self.c.admin_ids()),
+            **(await self.pay_summary()),
         })
+
+    async def pay_summary(self):
+        try:
+            rows = [r for r in await self.load_payments() if r.get("status") == "paid"]
+        except Exception:
+            return {"stars30": None, "starsTotal": None, "payers": None}
+        now = time.time()
+        return {"stars30": sum(int(r.get("stars") or 0) for r in rows if int(r.get("ts") or 0) > now - 30 * DAY),
+                "starsTotal": sum(int(r.get("stars") or 0) for r in rows), "payers": len({r.get("uid") for r in rows})}
 
     async def list_users(self, req):
         q = req.query
@@ -293,6 +303,8 @@ class Admin:
             "matches": [{**x, "name": names.get(x["with"], "")} for x in sorted(m, key=lambda r: -(r["ts"] or 0))[:50]],
             "filters": u.get("search_filters") or {},
             "referrerName": names.get(u.get("referred_by", ""), ""),
+            "payments": [{"id": r["id"], "stars": r.get("stars"), "days": r.get("days"), "status": r.get("status"), "ts": int(r.get("ts") or 0) * 1000}
+                         for r in await self.load_payments(uid)],
         })
         return web.json_response(card)
 
@@ -501,6 +513,85 @@ class Admin:
         self.cast["finished"] = int(time.time() * 1000)
         self.drop_cache()
 
+    # ---------- оплаты (зірки Telegram) ----------
+    async def load_payments(self, uid=None):
+        def run():
+            q = self.c.db.collection("payments")
+            if uid:
+                q = q.where("uid", "==", uid)
+            return [{**(d.to_dict() or {}), "id": d.id} for d in q.stream()]
+        rows = await asyncio.to_thread(run)
+        return sorted(rows, key=lambda r: -int(r.get("ts") or 0))
+
+    async def payments(self, req):
+        rows = await self.load_payments()
+        now = time.time()
+        paid = [r for r in rows if r.get("status") == "paid"]
+        refunded = [r for r in rows if r.get("status") == "refunded"]
+        stars = lambda lst: sum(int(r.get("stars") or 0) for r in lst)
+        since = lambda days: [r for r in paid if int(r.get("ts") or 0) > now - days * DAY]
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        days = []
+        for i in range(29, -1, -1):
+            a = today - i * DAY
+            days.append({"day": int(a * 1000), "n": stars(r for r in paid if a <= int(r.get("ts") or 0) < a + DAY)})
+        plans = defaultdict(lambda: {"n": 0, "stars": 0})
+        for r in paid:
+            plans[int(r.get("days") or 0)]["n"] += 1
+            plans[int(r.get("days") or 0)]["stars"] += int(r.get("stars") or 0)
+        balance = None
+        try:
+            b = await self.c.bot.get_my_star_balance()
+            balance = int(b.amount)
+        except Exception as e:  # noqa: BLE001
+            logging.info(f"star balance: {e}")
+        return web.json_response({
+            "balance": balance,
+            "total": stars(paid), "count": len(paid),
+            "today": stars(r for r in paid if int(r.get("ts") or 0) >= today),
+            "d7": stars(since(7)), "d30": stars(since(30)), "n30": len(since(30)),
+            "payers": len({r.get("uid") for r in paid}),
+            "refunded": stars(refunded), "refundedCount": len(refunded),
+            "days": days,
+            "plans": [{"days": d, **v} for d, v in sorted(plans.items())],
+            "items": [{"id": r["id"], "uid": r.get("uid"), "name": r.get("name", ""), "username": r.get("username", ""), "days": r.get("days"),
+                       "stars": r.get("stars"), "status": r.get("status"), "ts": int(r.get("ts") or 0) * 1000,
+                       "refundedAt": int(r.get("refunded_at") or 0) * 1000} for r in rows[:500]],
+        })
+
+    async def payment_action(self, req):
+        pid = req.match_info["id"]
+        b = await req.json()
+        if b.get("action") != "refund":
+            raise ValueError("Неизвестное действие")
+        db = self.c.db
+        ref = db.collection("payments").document(pid)
+        doc = await asyncio.to_thread(ref.get)
+        if not doc.exists:
+            raise ValueError("Платёж не найден")
+        p = doc.to_dict() or {}
+        if p.get("status") == "refunded":
+            raise ValueError("Уже возвращён")
+        try:
+            await self.c.bot.refund_star_payment(user_id=int(p["uid"]), telegram_payment_charge_id=pid)
+        except TelegramBadRequest as e:
+            raise ValueError(f"Telegram отказал: {e.message}")
+        await asyncio.to_thread(ref.update, {"status": "refunded", "refunded_at": int(time.time())})
+        # снимаем оплаченные дни (но не раньше «сейчас»)
+        cut = int(p.get("days") or 0) * DAY
+        for r, field in ((db.collection("users").document(p["uid"]), "likes_view_until"), (db.collection("premium").document(p["uid"]), "until")):
+            try:
+                d = await asyncio.to_thread(r.get)
+                if d.exists:
+                    cur = int((d.to_dict() or {}).get(field) or 0)
+                    await asyncio.to_thread(r.update, {field: max(int(time.time()), cur - cut) if cur else 0})
+            except Exception as e:  # noqa: BLE001
+                logging.warning(f"refund premium {p['uid']}: {e}")
+        self.drop_cache()
+        if b.get("notify", True):
+            await self.try_send(p["uid"], f"↩️ Вам повернуто {p.get('stars')} ⭐ за Преміум.")
+        return web.json_response({"ok": True})
+
     # ---------- настройки ----------
     async def get_settings(self, req):
         return web.json_response(self.c.settings)
@@ -523,6 +614,20 @@ class Admin:
             s["countries"] = lst[:20]
         if "premium_minutes" in b:
             s["premium_minutes"] = max(1, min(60 * 24 * 30, int(b["premium_minutes"])))
+        if "plans" in b:
+            pl = []
+            for x in b["plans"] or []:
+                d, st = int(x.get("days") or 0), int(x.get("stars") or 0)
+                if not (1 <= d <= 365 and 1 <= st <= 100000):
+                    raise ValueError("Тариф: дней от 1 до 365, звёзд от 1 до 100000")
+                pl.append({"days": d, "stars": st})
+            if not pl:
+                raise ValueError("Нужен хотя бы один тариф")
+            if len({x["days"] for x in pl}) != len(pl):
+                raise ValueError("Два тарифа с одинаковым числом дней")
+            s["plans"] = sorted(pl, key=lambda x: x["days"])[:6]
+        if "payments" in b:
+            s["payments"] = bool(b["payments"])
         if "report_hide" in b:
             s["report_hide"] = max(0, min(50, int(b["report_hide"])))
         if "admin_ids" in b:
@@ -564,6 +669,8 @@ class Admin:
         r.add_post("/admin/api/reports/{id}", self.report_action)
         r.add_get("/admin/api/broadcast", self.broadcast_status)
         r.add_post("/admin/api/broadcast", self.broadcast)
+        r.add_get("/admin/api/payments", self.payments)
+        r.add_post("/admin/api/payments/{id}", self.payment_action)
         r.add_get("/admin/api/settings", self.get_settings)
         r.add_post("/admin/api/settings", self.put_settings)
         r.add_get("/admin/photo/{fid}", self.photo)
