@@ -114,6 +114,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <button role="tab" data-tab="overview" aria-selected="true">Обзор</button>
       <button role="tab" data-tab="users" aria-selected="false">Анкеты</button>
       <button role="tab" data-tab="reports" aria-selected="false">Жалобы <span class="badge" id="repN" hidden></span></button>
+      <button role="tab" data-tab="pay" aria-selected="false">Оплаты</button>
       <button role="tab" data-tab="cast" aria-selected="false">Рассылка</button>
       <button role="tab" data-tab="settings" aria-selected="false">Настройки</button>
     </nav>
@@ -148,6 +149,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div id="reports"></div>
     </section>
 
+    <section data-panel="pay" hidden>
+      <div class="kpis" id="payKpis"></div>
+      <div class="grid2">
+        <div class="card"><h3>Звёзды за 30 дней</h3><div class="chart" id="payChart"></div><div class="axis" id="payAxis"></div></div>
+        <div class="card"><h3>Тарифы</h3><table><thead><tr><th>Тариф</th><th class="num">Покупок</th><th class="num">Звёзд</th></tr></thead><tbody id="payPlans"></tbody></table>
+          <p class="muted" style="font-size:13px;margin:10px 0 0">Цены меняются в «Настройках». Звёзды выводятся через @BotFather → бот → Balance (вывод через Fragment, звёзды становятся доступны к выводу примерно через 21 день).</p></div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="filters" style="margin:0 0 8px"><select id="payStatus"><option value="">Все платежи</option><option value="paid">Оплачены</option><option value="refunded">Возвраты</option></select></div>
+        <div style="overflow:auto"><table><thead><tr><th>Дата</th><th>Кто</th><th>Тариф</th><th class="num">Звёзд</th><th>Статус</th><th></th></tr></thead><tbody id="payRows"></tbody></table></div>
+      </div>
+    </section>
+
     <section data-panel="cast" hidden>
       <div class="grid2" style="margin-top:0">
         <div class="card">
@@ -180,6 +194,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           <div class="field"><label for="sAdmins">Telegram ID админов</label><input id="sAdmins" placeholder="123456789, 987654321"><span class="hint">Сюда приходят жалобы с кнопками «Забанить / Скрыть / Всё ок» и работает команда /admin. Свой ID покажет команда /myid в боте.</span></div>
           <div class="field" style="flex:0 1 200px"><label for="sPremium">Премиум за друга, минут</label><input id="sPremium" type="number" min="1" max="43200"></div>
           <div class="field" style="flex:0 1 220px"><label for="sHide">Скрывать после жалоб от N людей</label><input id="sHide" type="number" min="0" max="50"><span class="hint">0 — не скрывать автоматически.</span></div>
+        </div>
+        <div class="card" style="background:var(--soft);border:0;margin:6px 0 12px">
+          <h3>💎 Премиум за звёзды Telegram</h3>
+          <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="sPay"> Продавать Премиум (оплата прямо в боте и в приложении)</label>
+          <div id="sPlans" style="margin-top:10px"></div>
+          <div class="actions" style="margin:6px 0 0"><button class="btn sm" id="sPlanAdd" type="button">+ Тариф</button></div>
+          <span class="hint" style="font-size:12.5px;color:var(--muted)">Пустые строки не сохраняются. Звезда при выводе стоит примерно 1–1,3 цента, точный курс — в @BotFather → Balance.</span>
         </div>
         <div class="field"><label for="sCountries">Страны (по одной в строке)</label><textarea id="sCountries" style="min-height:120px"></textarea><span class="hint">Кнопки при регистрации и в фильтрах. Переименуете страну — старые анкеты останутся со старым названием.</span></div>
         <div class="field"><label for="sOnb">Приветствие после капчи</label><textarea id="sOnb"></textarea></div>
@@ -251,6 +272,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       if (tab === "users") await loadUsers(fresh);
       if (tab === "reports") await loadReports();
       if (tab === "cast") { castCount(); await castStatus(); }
+      if (tab === "pay") await loadPay();
       if (tab === "settings") await loadSettings();
     } catch (e) { if (e.message !== "Нужно войти") toast(e.message, true); }
   }
@@ -276,6 +298,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       k("Лайков ждут ответа", num(s.likesPending), "входящие, ещё не просмотрены"),
       k("Новых жалоб", num(s.reportsNew), `скрыто ${num(s.hidden)} · бан ${num(s.banned)}`),
       k("Пришли по приглашению", num(s.referred), `${pct(s.referred, s.total)} от всех · Премиум сейчас у ${num(s.premium)}`),
+      k("Звёзд за 30 дней", s.stars30 == null ? "—" : "⭐ " + num(s.stars30), s.starsTotal == null ? "оплаты" : `всего ⭐ ${num(s.starsTotal)} · платили ${num(s.payers)} чел.`),
       k("С геолокацией", num(s.location), `${pct(s.location, s.total)} · заблокировали бота ${num(s.blocked)}`),
     ].join("") + (s.minors ? `<div class="card kpi" style="border-color:var(--bad)"><div class="l" style="color:var(--bad)">Младше 18</div><div class="v">${num(s.minors)}</div><div class="s">зарегистрировались до запрета — <a href="#" id="seeMinors">посмотреть</a></div></div>` : "");
     if ($("seeMinors")) $("seeMinors").onclick = e => { e.preventDefault(); $("fStatus").value = "minor"; $("tabs").querySelector('[data-tab="users"]').click(); };
@@ -337,6 +360,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
             <dt>Лайкнули</dt><dd>${num(u.likedByCount)} ждут ответа${u.likedBy.length ? ": " + u.likedBy.slice(0, 12).map(x => `<a href="#" data-u="${esc(x.id)}">${esc(x.name || x.id)}</a>`).join(", ") : ""}</dd>
             <dt>Симпатии</dt><dd>${u.matches.length ? u.matches.slice(0, 12).map(x => `<a href="#" data-u="${esc(x.with)}">${esc(x.name || x.with)}</a>`).join(", ") : "—"}</dd>
             <dt>Жалобы</dt><dd>на него: <b>${u.reportsList.length}</b> · сам пожаловался: ${num(u.reportsMade)}</dd>
+            <dt>Оплаты</dt><dd>${(u.payments || []).length ? u.payments.map(p => `⭐ ${num(p.stars)} · ${p.days} дн. · ${date(p.ts)}${p.status === "refunded" ? " · <span class='tag warn'>возврат</span>" : ""}`).join("<br>") : "—"}</dd>
           </dl>
           <div class="actions">
             ${u.banned ? `<button class="btn" data-a="unban">Разбанить</button>` : `<button class="btn bad" data-a="ban">⛔️ Забанить</button>`}
@@ -439,11 +463,59 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     if (c.running) { $("cStop").onclick = async () => { await api("/admin/api/broadcast", { stop: true }); castStatus(); }; castTimer = setTimeout(() => tab === "cast" && castStatus(), 2000); }
   }
 
+  // ---------- оплаты ----------
+  $("payStatus").onchange = () => renderPayRows();
+  let pay = null;
+  async function loadPay() {
+    pay = await api("/admin/api/payments");
+    const k = (l, v, sub) => `<div class="card kpi"><div class="l">${l}</div><div class="v">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
+    $("payKpis").innerHTML = [
+      k("Баланс бота", pay.balance == null ? "—" : "⭐ " + num(pay.balance), "с учётом возвратов и вывода"),
+      k("Сегодня", "⭐ " + num(pay.today), `за 7 дней ⭐ ${num(pay.d7)}`),
+      k("За 30 дней", "⭐ " + num(pay.d30), `${num(pay.n30)} покупок`),
+      k("Всего", "⭐ " + num(pay.total), `${num(pay.count)} покупок · ${num(pay.payers)} чел.`),
+      k("Возвраты", "⭐ " + num(pay.refunded), `${num(pay.refundedCount)} шт.`),
+    ].join("");
+    const max = Math.max(1, ...pay.days.map(d => d.n));
+    $("payChart").innerHTML = pay.days.map(d => `<div class="b" style="height:${d.n / max * 100}%" title="${new Date(d.day).toLocaleDateString("ru-RU")}: ⭐ ${d.n}">${d.n && d.n === max ? `<span>${d.n}</span>` : ""}</div>`).join("");
+    const f = t => new Date(t).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    $("payAxis").innerHTML = `<span>${f(pay.days[0].day)}</span><span>${f(pay.days[15].day)}</span><span>сегодня</span>`;
+    $("payPlans").innerHTML = pay.plans.length ? pay.plans.map(p => `<tr><td>${p.days} дн.</td><td class="num">${num(p.n)}</td><td class="num"><b>⭐ ${num(p.stars)}</b></td></tr>`).join("") : `<tr><td class="empty" colspan="3">Покупок пока нет</td></tr>`;
+    renderPayRows();
+  }
+  function renderPayRows() {
+    const st = $("payStatus").value, items = pay.items.filter(p => !st || p.status === st);
+    $("payRows").innerHTML = items.length ? items.map(p => `<tr>
+      <td>${date(p.ts)}</td>
+      <td><a href="#" data-u="${esc(p.uid)}">${esc(p.name || p.uid)}</a>${p.username ? ` <span class="muted">@${esc(p.username)}</span>` : ""}</td>
+      <td>${esc(p.days)} дн.</td><td class="num"><b>⭐ ${num(p.stars)}</b></td>
+      <td>${p.status === "refunded" ? `<span class="tag warn">возврат ${date(p.refundedAt)}</span>` : `<span class="tag good">оплачен</span>`}</td>
+      <td>${p.status === "paid" ? `<button class="btn bad sm" data-ref="${esc(p.id)}">Вернуть</button>` : ""}</td></tr>`).join("") : `<tr><td class="empty" colspan="6">Платежей пока нет</td></tr>`;
+    $("payRows").querySelectorAll("[data-u]").forEach(a => a.onclick = e => { e.preventDefault(); openUser(a.dataset.u); });
+    $("payRows").querySelectorAll("[data-ref]").forEach(b => b.onclick = async () => {
+      if (!armed(b, "Вернуть звёзды?")) return;
+      b.disabled = true;
+      try { await api("/admin/api/payments/" + encodeURIComponent(b.dataset.ref), { action: "refund" }); toast("Звёзды возвращены, Премиум сокращён"); loadPay(); }
+      catch (e) { toast(e.message, true); b.disabled = false; }
+    });
+  }
+
   // ---------- настройки ----------
+  function planRow(p = {}) {
+    const d = document.createElement("div"); d.className = "row plan-row"; d.style.marginBottom = "6px";
+    d.innerHTML = `<div class="field" style="flex:0 1 140px"><label>Дней</label><input type="number" min="1" max="365" class="pDays" value="${esc(p.days ?? "")}"></div>
+      <div class="field" style="flex:0 1 140px"><label>Звёзд ⭐</label><input type="number" min="1" max="100000" class="pStars" value="${esc(p.stars ?? "")}"></div>
+      <button class="btn sm bad" type="button" style="margin-bottom:4px">✕</button>`;
+    d.querySelector("button").onclick = () => d.remove();
+    $("sPlans").appendChild(d);
+  }
+  $("sPlanAdd").onclick = () => planRow();
   async function loadSettings() {
     const s = await api("/admin/api/settings");
     $("sAdmins").value = (s.admin_ids || []).join(", ");
     $("sPremium").value = s.premium_minutes; $("sHide").value = s.report_hide;
+    $("sPay").checked = s.payments !== false;
+    $("sPlans").innerHTML = ""; (s.plans || []).forEach(planRow);
     $("sCountries").value = (s.countries || []).join("\n");
     $("sOnb").value = s.onboarding || ""; $("sDisc").value = s.disclaimer || ""; $("sPriv").value = s.privacy || ""; $("sBack").value = s.welcome_back || "";
   }
@@ -455,6 +527,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       onboarding: $("sOnb").value, disclaimer: $("sDisc").value, welcome_back: $("sBack").value,
     };
     body.privacy = $("sPriv").value;
+    body.payments = $("sPay").checked;
+    body.plans = [...$("sPlans").querySelectorAll(".plan-row")].map(r => ({ days: +r.querySelector(".pDays").value, stars: +r.querySelector(".pStars").value })).filter(p => p.days || p.stars);
     try { await api("/admin/api/settings", body); $("sMsg").textContent = "Сохранено ✓"; setTimeout(() => $("sMsg").textContent = "", 3000); stats = null; }
     catch (e) { toast(e.message, true); }
   };

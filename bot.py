@@ -15,6 +15,7 @@ from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, Telegra
 from aiogram import BaseMiddleware
 import firebase_admin
 from firebase_admin import credentials, firestore
+from google.api_core.exceptions import AlreadyExists
 from admin import Ctx, start_admin
 from webapp import MiniApp, app_url, ref_link, main_app
 import sys
@@ -108,6 +109,8 @@ SETTINGS = {
     "welcome_back": "❤️ З поверненням!",
     "countries": list(COUNTRIES),
     "premium_minutes": 10,
+    "plans": [{"days": 7, "stars": 75}, {"days": 30, "stars": 250}, {"days": 90, "stars": 600}],  # Преміум за зірки
+    "payments": True,
     "report_hide": 3,
     "admin_ids": [],
     "nudges": True,
@@ -163,6 +166,8 @@ class GuardMiddleware(BaseMiddleware):
         if isinstance(event, types.Message) and event.chat.type != "private":
             return
         user = data.get("event_from_user")
+        if isinstance(event, types.Message) and event.successful_payment:
+            return await handler(event, data)  # гроші вже списано — платіж зараховуємо завжди
         if user:
             uid = str(user.id)
             if uid in BANNED:
@@ -193,6 +198,172 @@ async def touch(uid):
 
 dp.message.outer_middleware(GuardMiddleware())
 dp.callback_query.outer_middleware(GuardMiddleware())
+
+# =========================================================
+# ОПЛАТА ПРЕМІУМУ ЗІРКАМИ TELEGRAM (XTR)
+# Обробники стоять тут, вище за кроки реєстрації: платіж, що прийшов посеред анкети,
+# не має потрапити у відповідь на питання.
+# =========================================================
+DEFAULT_PLANS = [{"days": 7, "stars": 75}, {"days": 30, "stars": 250}, {"days": 90, "stars": 600}]
+
+def plans():
+    """Тарифи з адмінки: [{"days": 7, "stars": 75}, ...]"""
+    out = []
+    for p in SETTINGS.get("plans") or DEFAULT_PLANS:
+        try:
+            d, s = int(p["days"]), int(p["stars"])
+            if 1 <= d <= 365 and 1 <= s <= 100000:
+                out.append({"days": d, "stars": s})
+        except Exception:
+            continue
+    return out or list(DEFAULT_PLANS)
+
+def payments_on():
+    return SETTINGS.get("payments", True) is not False
+
+def plan_title(days):
+    return {7: "тиждень", 30: "місяць", 90: "3 місяці", 180: "пів року", 365: "рік"}.get(days, f"{days} дн.")
+
+def fmt_until(ts):
+    return time.strftime("%d.%m.%Y %H:%M" if ts - time.time() > 86400 else "%H:%M", time.localtime(ts))
+
+def premium_until(p):
+    return int((p or {}).get("likes_view_until") or 0)
+
+def invoice_args(uid, plan):
+    d, s = plan["days"], plan["stars"]
+    return dict(
+        title=f"Преміум на {plan_title(d)}",
+        description=f"«Хто мене лайкнув?» на {d} дн.: бачиш усіх, кому сподобався(-лась), і відповідаєш взаємністю.",
+        payload=f"prem:{d}:{s}:{uid}",
+        currency="XTR",  # зірки Telegram: оплата всередині Telegram, provider_token не потрібен
+        prices=[types.LabeledPrice(label=f"Преміум {d} дн.", amount=s)],
+    )
+
+async def premium_invoice_link(uid, i):
+    ps = plans()
+    if not payments_on() or not 0 <= i < len(ps):
+        raise ValueError("Тариф недоступний")
+    return await bot.create_invoice_link(**invoice_args(uid, ps[i]))
+
+def parse_payload(payload):
+    try:
+        kind, d, s, uid = str(payload).split(":")
+        return (int(d), int(s), uid) if kind == "prem" else None
+    except Exception:
+        return None
+
+async def add_premium(uid, seconds):
+    """Додає час Преміуму до поточного (і в анкету, і в окремий запис, що переживає видалення анкети)."""
+    uid = str(uid)
+    p = await get_user(uid)
+    keep = await firebase_get(db.collection("premium").document(uid))
+    cur = max(premium_until(p), int(((keep.to_dict() or {}) if keep and keep.exists else {}).get("until") or 0))
+    until = max(int(time.time()), cur) + int(seconds)
+    await firebase_set(db.collection("premium").document(uid), {"until": until})
+    if p:
+        await update_user(uid, {"likes_view_until": until})
+    return until
+
+async def paid_premium_until(uid):
+    """Оплачений Преміум, який треба повернути в нову анкету після видалення старої."""
+    try:
+        d = await firebase_get(db.collection("premium").document(str(uid)))
+        u = int(((d.to_dict() or {}) if d and d.exists else {}).get("until") or 0)
+        return u if u > time.time() else 0
+    except Exception:
+        return 0
+
+@dp.pre_checkout_query()
+async def pre_checkout(query: types.PreCheckoutQuery):
+    info = parse_payload(query.invoice_payload)
+    uid = str(query.from_user.id)
+    ok = bool(info) and payments_on() and query.currency == "XTR" and info[2] == uid and uid not in BANNED \
+        and {"days": info[0], "stars": info[1]} in plans() and query.total_amount == info[1]
+    if ok:
+        await query.answer(ok=True)
+    else:
+        await query.answer(ok=False, error_message="Ціна або тариф змінилися. Відкрий «Преміум» ще раз і обери тариф.")
+
+@dp.message(F.successful_payment)
+async def on_successful_payment(message: types.Message, state: FSMContext):
+    sp = message.successful_payment
+    uid = str(message.from_user.id)
+    info = parse_payload(sp.invoice_payload)
+    if not info:
+        logging.error(f"Невідомий платіж {sp.invoice_payload}")
+        return
+    days = info[0]
+    me = await get_user(uid) or {}
+    record = {"uid": uid, "name": me.get("name") or message.from_user.first_name or "", "username": message.from_user.username or "",
+              "days": days, "stars": sp.total_amount, "currency": sp.currency, "status": "paid", "ts": int(time.time())}
+    # один платіж — одне нарахування, навіть якщо Telegram надішле оновлення двічі
+    try:
+        await asyncio.to_thread(db.collection("payments").document(sp.telegram_payment_charge_id).create, record)
+    except AlreadyExists:
+        logging.warning(f"Повторне оновлення платежу {sp.telegram_payment_charge_id}")
+        return
+    until = await add_premium(uid, days * 86400)
+    logging.info(f"💰 {sp.total_amount}⭐ від {uid}: Преміум {days} дн. до {fmt_until(until)}")
+    await message.answer(f"💎 <b>Дякуємо! Преміум активовано до {fmt_until(until)}.</b>\n\nТепер видно всіх, кому ти сподобався(-лась) ❤️",
+                         parse_mode="HTML", reply_markup=ikb([[open_btn("❤️ Хто мене лайкнув", "likes", "lk:show")]]))
+    for a in admin_ids():
+        await safe_send_message(a, f"💰 Оплата {sp.total_amount}⭐ · {esc(record['name'])} (<code>{uid}</code>) · {days} дн.", parse_mode="HTML")
+
+def premium_text(p):
+    u = premium_until(p)
+    head = f"💎 <b>Преміум активний до {fmt_until(u)}</b>\nМожна продовжити — дні додадуться.\n\n" if u > time.time() else "💎 <b>Преміум</b>\n\n"
+    return (head + "• бачиш усіх, хто тебе лайкнув, — з фото й анкетою\n"
+            "• відповідаєш взаємністю одним дотиком\n\n"
+            "Оплата зірками Telegram ⭐ прямо тут, без картки й сторонніх сайтів.\n"
+            f"🎁 Або запроси друга — ви обоє отримаєте {premium_minutes()} хв безкоштовно.")
+
+async def plans_kb(uid):
+    rows = [[(f"⭐ {p['stars']} — {plan_title(p['days'])}", f"buy:{i}")] for i, p in enumerate(plans())] if payments_on() else []
+    link = ref_link(await bot_username(), uid)
+    return ikb(rows + [[(B_INVITE, "url:" + share_url(link))]])
+
+async def send_premium(chat_id, uid):
+    await safe_send_message(chat_id, premium_text(await get_user(uid)), parse_mode="HTML", reply_markup=await plans_kb(uid))
+
+@dp.message(Command("premium"))
+async def cmd_premium(message: types.Message, state: FSMContext):
+    await send_premium(message.chat.id, str(message.from_user.id))
+
+@dp.callback_query(F.data == "premium")
+async def cb_premium(callback: types.CallbackQuery):
+    await callback.answer()
+    await send_premium(callback.message.chat.id, str(callback.from_user.id))
+
+@dp.callback_query(F.data.startswith("buy:"))
+async def cb_buy(callback: types.CallbackQuery):
+    i = int(callback.data.split(":")[1]) if callback.data.split(":")[1].isdigit() else -1
+    ps = plans()
+    if not payments_on() or not 0 <= i < len(ps):
+        return await callback.answer("Тариф недоступний", show_alert=True)
+    await callback.answer()
+    await bot.send_invoice(callback.message.chat.id, **invoice_args(str(callback.from_user.id), ps[i]))
+
+@dp.message(Command("terms"))
+async def cmd_terms(message: types.Message):
+    lst = "\n".join(f"• {plan_title(p['days'])} ({p['days']} дн.) — {p['stars']} ⭐" for p in plans())
+    await message.answer(
+        "📄 <b>Умови Преміуму</b>\n\n" + lst + "\n\n"
+        "• Оплата разова, зірками Telegram, без автосписань. Дні додаються до поточного строку.\n"
+        "• Преміум відкриває список тих, хто тебе лайкнув. Оплачений строк зберігається, навіть якщо видалити анкету й створити нову.\n"
+        "• Якщо Преміум не активувався або сталася помилка — /paysupport, ми повернемо зірки.\n"
+        "• За порушення правил (фейки, спам, образи) анкету блокують без повернення коштів.\n\n"
+        "Правила користування: /help", parse_mode="HTML")
+
+@dp.message(Command("paysupport"))
+async def cmd_paysupport(message: types.Message):
+    await message.answer(
+        "💬 <b>Підтримка з оплати</b>\n\n"
+        "Опиши проблему одним повідомленням у відповідь (дата оплати, скільки зірок) — його отримає адміністратор.\n"
+        "Якщо Преміум не активувався, ми перевіримо платіж і нарахуємо дні або повернемо зірки.", parse_mode="HTML")
+    for a in admin_ids():
+        await safe_send_message(a, f"💬 /paysupport від {esc(message.from_user.full_name)} (<code>{message.from_user.id}</code>"
+                                   f"{' @' + message.from_user.username if message.from_user.username else ''}). Подивіться оплати в адмінці.", parse_mode="HTML")
 
 # =========================================================
 # STATES
@@ -1103,6 +1274,9 @@ async def process_about(message: types.Message, state: FSMContext):
         }
         if referrer:
             profile["likes_view_until"] = now + premium_minutes() * 60  # бонус і новому користувачу
+        paid = await paid_premium_until(user_id)  # оплачений Преміум повертається в нову анкету
+        if paid > int(profile.get("likes_view_until") or 0):
+            profile["likes_view_until"] = paid
         await firebase_set(user_ref(user_id), profile)
 
         if referrer:
@@ -1153,7 +1327,7 @@ async def finish_registration(message: types.Message, state: FSMContext):
     if p:
         await send_media(message.chat.id, media_list(p)[0], card_text(p, own=True), silent=False)
         await message.answer("Все вірно?", reply_markup=ikb([[("✅ Так, все вірно", "reg:ok"), ("✏️ Змінити анкету", "reg:edit")]]))
-    if p and p.get("likes_view_until", 0) > time.time():
+    if p and p.get("referred_by") and p.get("likes_view_until", 0) > time.time():
         await message.answer(f"🎁 Тебе запросив друг — «Хто мене лайкнув?» відкрито на {premium_minutes()} хв.")
     if not message.from_user.username:
         await message.answer("💡 Додай нікнейм у Telegram (Налаштування → Ім'я користувача), щоб після взаємної симпатії тобі могли написати.")
@@ -1517,8 +1691,10 @@ async def show_likes(chat_id, uid):
         return await safe_send_message(chat_id,
             f"❤️ <b>Тебе лайкнули: {n}{'+' if n == 20 else ''}</b>\n\n"
             "Ці люди покажуться першими, коли відкриєш анкети 👥\n\n"
-            f"🔓 Щоб одразу побачити всіх списком — запроси друга: ви обоє отримаєте Преміум на {premium_minutes()} хв.",
-            parse_mode="HTML", reply_markup=ikb([[("👥 Дивитися анкети", "f:more")], [("🎁 Запросити друга", "url:" + share_url(link))]]))
+            "🔓 Щоб одразу побачити всіх списком — оформи 💎 Преміум за зірки Telegram"
+            f" або запроси друга: ви обоє отримаєте Преміум на {premium_minutes()} хв.",
+            parse_mode="HTML", reply_markup=ikb(([[(f"💎 Преміум — від {min(p['stars'] for p in plans())} ⭐", "premium")]] if payments_on() else [])
+                                                + [[("👥 Дивитися анкети", "f:more")], [("🎁 Запросити друга", "url:" + share_url(link))]]))
     await safe_send_message(chat_id, f"💎 <b>Тебе лайкнули: {n}</b>", parse_mode="HTML")
     for like in likes[:10]:
         p = await get_user(like.id)
@@ -1591,8 +1767,9 @@ async def menu_invite_friend(message: types.Message, state: FSMContext):
         f"👥 Ти вже запросив(-ла): <b>{invited}</b>"
     )
     if int(me.get("likes_view_until") or 0) > time.time():
-        text += f"\n💎 Преміум активний до {time.strftime('%H:%M', time.localtime(me['likes_view_until']))}"
-    await message.answer(text, parse_mode="HTML", reply_markup=ikb([[("📤 Надіслати другу", "url:" + share_url(link))]]))
+        text += f"\n💎 Преміум активний до {fmt_until(me['likes_view_until'])}"
+    rows = [[("📤 Надіслати другу", "url:" + share_url(link))]] + ([[("💎 Купити Преміум за ⭐", "premium")]] if payments_on() else [])
+    await message.answer(text, parse_mode="HTML", reply_markup=ikb(rows))
 
 def privacy_text():
     return SETTINGS.get("privacy") or (
@@ -1627,6 +1804,7 @@ async def menu_more(message: types.Message, state: FSMContext):
         rows += [[(f"ℹ️ Про {name}", f"f:i:{cur['cid']}:{i}")], [(f"💌 Суперлайк: {name}", f"f:sl:{cur['cid']}:{i}")], [(f"🚨 Скарга: {name}", f"f:r:{cur['cid']}:{i}")]]
     await message.answer("☰ <b>Ще</b>", parse_mode="HTML", reply_markup=ikb(rows + [
         [("☕️ Вільний(-а) сьогодні", "me:coffee")],
+        [("💎 Преміум", "premium")],
         [("ℹ️ Як це працює", "more:help"), ("📜 Правила", "more:privacy")],
         [("⏸ Пауза анкети", "me:pause"), ("🗑 Видалити анкету", "me:del")],
     ]))
@@ -1826,7 +2004,10 @@ async def main():
             types.BotCommand(command="search", description="👥 Дивитися анкети"),
             types.BotCommand(command="likes", description="❤️ Мої лайки"),
             types.BotCommand(command="profile", description="👤 Моя анкета"),
+            types.BotCommand(command="premium", description="💎 Преміум"),
             types.BotCommand(command="help", description="ℹ️ Як це працює"),
+            types.BotCommand(command="terms", description="📄 Умови оплати"),
+            types.BotCommand(command="paysupport", description="💬 Підтримка з оплати"),
             types.BotCommand(command="start", description="🔄 Головне меню"),
         ])
     except Exception as e:

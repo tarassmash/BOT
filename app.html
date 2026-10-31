@@ -88,6 +88,19 @@ h2 { margin: 0 0 4px; font-size: 22px; }
 .row .t b { display: block; }
 .pill { padding: 8px 14px; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-weight: 600; font-size: 14px; white-space: nowrap; }
 
+/* преміум */
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin: 12px 0 4px; }
+.plan { position: relative; border-radius: 14px; background: var(--bg2); border: 1.5px solid var(--line); padding: 14px 6px 10px; text-align: center; }
+.plan:active { transform: scale(.97); }
+.plan.best { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg2)); }
+.plan b { display: block; font-size: 21px; line-height: 1.1; }
+.plan .pt { display: block; font-size: 14px; margin-top: 3px; }
+.plan small { display: block; color: var(--hint); font-size: 11.5px; margin-top: 2px; }
+.plan em { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10.5px; font-weight: 700; background: var(--accent); color: var(--accent-text); padding: 1px 8px; border-radius: 8px; white-space: nowrap; }
+.plan[disabled] { opacity: .5; }
+.prem-on { background: color-mix(in srgb, var(--accent) 14%, var(--bg2)); border-radius: 14px; padding: 12px 14px; margin: 8px 0; }
+.linkish { color: var(--hint); text-decoration: underline; font-size: 13px; display: inline-block; margin-top: 6px; }
+
 /* профіль */
 .me-photo { width: 100%; aspect-ratio: 3/4; max-height: 52vh; object-fit: cover; border-radius: 16px; background: var(--bg2); display: block; }
 .field { margin: 12px 0; }
@@ -188,6 +201,45 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     if (["likes", "matches", "profile"].includes(start)) go(start); else loadNext();
   }
   function setDot(n) { $("likesDot").hidden = !n; $("likesDot").textContent = n > 99 ? "99+" : n; }
+
+  // ---------- преміум: оплата зірками Telegram прямо в застосунку ----------
+  const isPrem = () => (ME?.me?.premiumUntil || 0) * 1000 > Date.now();
+  const untilText = t => { const d = new Date(t * 1000); return t * 1000 - Date.now() > 864e5 ? "до " + d.toLocaleDateString("uk", { day: "numeric", month: "long" }) : "сьогодні до " + d.toLocaleTimeString("uk", { hour: "2-digit", minute: "2-digit" }); };
+  function plansHtml() {
+    const ps = ME.plans || [];
+    if (!ps.length || !tg?.openInvoice) return "";
+    const perDay = p => p.stars / p.days, best = ps.length > 1 ? ps.reduce((a, b) => perDay(b) < perDay(a) ? b : a) : null;
+    return `<div class="plans">${ps.map(p => `<button class="plan ${p === best ? "best" : ""}" data-plan="${p.i}">${p === best ? "<em>Вигідно</em>" : ""}<b>⭐ ${p.stars}</b><span class="pt">${esc(p.title)}</span><small>≈ ${Math.max(1, Math.round(perDay(p)))} ⭐ / день</small></button>`).join("")}</div>
+      <button class="linkish" data-terms>Умови оплати</button>`;
+  }
+  function bindPlans(root, after) {
+    root.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => buyPremium(+b.dataset.plan, b, after));
+    root.querySelectorAll("[data-terms]").forEach(b => b.onclick = showTerms);
+  }
+  function showTerms() {
+    sheet(`<h2>💎 Умови Преміуму</h2>${(ME.plans || []).map(p => `<p style="margin:6px 0">⭐ <b>${p.stars}</b> — ${esc(p.title)} (${p.days} дн.)</p>`).join("")}
+      <p class="muted">Разова оплата зірками Telegram, без автосписань. Дні додаються до поточного строку. Оплачений Преміум зберігається, навіть якщо видалити анкету й створити нову.</p>
+      <p class="muted">Не активувався або щось пішло не так — напиши боту /paysupport, ми нарахуємо дні або повернемо зірки.</p>`);
+  }
+  async function buyPremium(i, btn, after) {
+    let link;
+    btn && (btn.disabled = true);
+    try { link = (await api("invoice", { plan: i })).link; } catch (e) { toast(e.message); btn && (btn.disabled = false); return; }
+    const before = ME.me.premiumUntil || 0;
+    tg.openInvoice(link, async status => {
+      btn && (btn.disabled = false);
+      if (status === "paid") {
+        ok("success"); toast("💎 Оплату отримано! Активуємо Преміум…");
+        // бот зараховує платіж за секунду-дві — чекаємо, поки строк оновиться
+        for (let k = 0; k < 15; k++) {
+          try { const r = await api("premium"); if (r.premiumUntil > before && r.premiumUntil * 1000 > Date.now()) { ME.me.premiumUntil = r.premiumUntil; break; } } catch {}
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        toast(isPrem() ? `💎 Преміум ${untilText(ME.me.premiumUntil)}` : "Оплата пройшла — Преміум з'явиться за хвилину");
+        after && after();
+      } else if (status === "failed") { ok("error"); toast("Оплата не пройшла. Спробуй ще раз."); }
+    });
+  }
 
   // ---------- таби ----------
   let view = "feed";
@@ -330,13 +382,15 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       const share = `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("Знайомства для українців за кордоном ❤️")}`;
       box.innerHTML = `<div style="text-align:center"><div class="big">${r.count}</div><div>${r.count === 1 ? "людині" : "людям"} ти сподобався(-лась)</div>
         <p class="muted">Вони покажуться першими в «Анкетах».</p><button class="btn primary" id="toFeed">🔥 Дивитися анкети</button>
-        <p class="muted" style="margin-top:22px">Щоб одразу побачити всіх — запроси друга: ви обоє отримаєте Преміум на ${ME.premiumMinutes} хв.</p>
+        ${plansHtml() ? `<div class="sec" style="margin-top:26px">💎 Побач усіх зараз</div><p class="muted" style="margin:0">Преміум відкриває фото й анкети всіх, хто тебе лайкнув.</p>${plansHtml()}` : ""}
+        <p class="muted" style="margin-top:22px">Або запроси друга — ви обоє отримаєте Преміум на ${ME.premiumMinutes} хв безкоштовно.</p>
         <button class="btn" id="invite">🎁 Запросити друга</button></div>`;
+      bindPlans(box, renderLikes);
       $("toFeed").onclick = () => go("feed");
       $("invite").onclick = () => tg.openTelegramLink(share);
       return;
     }
-    box.innerHTML = `<h2>Тебе лайкнули: ${r.count}</h2><p class="muted">Натисни на фото, щоб відповісти.</p><div class="grid">${r.items.map((c, i) => `<button class="cell" data-i="${i}"><div class="ph"><img src="${c.media[0]?.url || ""}" alt="" loading="lazy"></div><div class="t"><b>${esc(c.name)}, ${esc(c.age)}</b><br><span class="muted">${esc(c.city || c.country)}</span></div></button>`).join("")}</div>`;
+    box.innerHTML = `<h2>Тебе лайкнули: ${r.count}</h2><p class="muted">Натисни на фото, щоб відповісти.${isPrem() ? ` · 💎 ${untilText(ME.me.premiumUntil)}` : ""}</p><div class="grid">${r.items.map((c, i) => `<button class="cell" data-i="${i}"><div class="ph"><img src="${c.media[0]?.url || ""}" alt="" loading="lazy"></div><div class="t"><b>${esc(c.name)}, ${esc(c.age)}</b><br><span class="muted">${esc(c.city || c.country)}</span></div></button>`).join("")}</div>`;
     box.querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
       const c = r.items[+b.dataset.i];
       sheet(`<img src="${c.media[0]?.url || ""}" alt="" style="width:100%;border-radius:14px;max-height:50vh;object-fit:cover">` + infoHtml(c) +
@@ -488,9 +542,13 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       <div class="field"><label>Країна пошуку</label><select id="fCountry">${opt("", f.country, `Моя (${m.country})`)}${ME.countries.map(c => opt(c, f.country)).join("")}</select></div>
       <div class="two"><div class="field"><label>Вік від</label><input id="fMin" type="number" inputmode="numeric" min="18" max="70" value="${esc(f.min_age ?? "")}" placeholder="18"></div><div class="field"><label>до</label><input id="fMax" type="number" inputmode="numeric" min="18" max="70" value="${esc(f.max_age ?? "")}" placeholder="70"></div></div>
       <button class="btn" id="saveF">Застосувати фільтри</button>
+      <div class="sec">💎 Преміум</div>
+      ${prem ? `<div class="prem-on">💎 <b>Преміум активний</b> — ${untilText(m.premiumUntil)}<br><span class="muted">Бачиш усіх, хто тебе лайкнув. Можна продовжити — дні додадуться.</span></div>`
+             : `<p style="margin:4px 2px">Побач усіх, кому ти сподобався(-лась), і відповідай взаємністю. Оплата зірками Telegram ⭐ — не виходячи з застосунку.</p>`}
+      <div id="pPlans">${plansHtml() || `<p class="muted" style="margin:4px 2px">Оплата тимчасово недоступна — запроси друга, щоб отримати Преміум.</p>`}</div>
       <div class="sec">Запроси друзів</div>
       <p style="margin:4px 2px">🎁 Коли друг створить анкету за твоїм посиланням, ви <b>обоє</b> отримаєте ${ME.premiumMinutes} хв Преміуму — побачите, хто вас лайкнув.</p>
-      <p class="muted" style="margin:4px 2px">Ти вже запросив(-ла): <b>${ME.invited}</b>${prem ? ` · 💎 Преміум до ${new Date(m.premiumUntil * 1000).toLocaleTimeString("uk", { hour: "2-digit", minute: "2-digit" })}` : ""}</p>
+      <p class="muted" style="margin:4px 2px">Ти вже запросив(-ла): <b>${ME.invited}</b></p>
       <div class="two"><button class="btn primary" id="share">📤 Надіслати другу</button><button class="btn" id="copy">🔗 Копіювати</button></div>
       <div class="sec">Ще</div>
       <button class="btn" id="rules">📜 Правила і безпека</button>
@@ -502,6 +560,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     };
     onMedia.needOne = true;
     mediaEditor($("pMedia"), media, onMedia);
+    bindPlans($("pPlans"), () => view === "profile" && renderProfile());
     $("save").onclick = async () => {
       const body = { name: $("pName").value, age: $("pAge").value, country: $("pCountry").value, city: $("pCity").value, gender: $("pGender").value, search: $("pSearch").value, hometown: $("pHome").value, about: $("pAbout").value };
       try { await api("profile", body); Object.assign(ME.me, { ...body, age: +body.age }); nextCard = null; ok("success"); toast("✅ Збережено"); } catch (e) { toast(e.message); }

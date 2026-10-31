@@ -100,6 +100,7 @@ class MiniApp:
         p = await c.get_user(uid)
         bot_name = await c.bot_username()
         common = {"bot": bot_name, "countries": list(c.countries()), "reasons": c.REPORT_REASONS, "premiumMinutes": c.premium_minutes(),
+                  "plans": [{"i": i, "days": p["days"], "stars": p["stars"], "title": c.plan_title(p["days"])} for i, p in enumerate(c.plans())] if c.payments_on() else [],
                   "minAge": c.MIN_AGE, "hometowns": c.HOMETOWNS, "rules": c.privacy_text(), "disclaimer": c.SETTINGS.get("disclaimer", ""),
                   "name": (tg_user.get("first_name") or "")[:30]}
         if not p:
@@ -356,12 +357,33 @@ class MiniApp:
         }
         if referrer:
             profile["likes_view_until"] = now + c.premium_minutes() * 60
+        paid = await c.paid_premium_until(uid)  # оплачений Преміум повертається в нову анкету
+        if paid > int(profile.get("likes_view_until") or 0):
+            profile["likes_view_until"] = paid
         await c.firebase_set(c.user_ref(uid), profile)
         if pend and pend.exists:
             await c.firebase_delete(pend.reference)
         if referrer:
             asyncio.create_task(c.reward_referrer(referrer))
         return web.json_response({"ok": True})
+
+    async def invoice(self, req):
+        """Рахунок у зірках Telegram: застосунок відкриває його через Telegram.WebApp.openInvoice — оплата не виходячи з застосунку."""
+        uid, _ = self.user_id(req)
+        b = await req.json()
+        try:
+            link = await self.c.premium_invoice_link(uid, int(b.get("plan", -1)))
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=400)
+        except Exception as e:  # noqa: BLE001
+            logging.warning(f"app invoice: {e}")
+            return web.json_response({"error": "Не вдалося створити рахунок. Спробуй ще раз."}, status=400)
+        return web.json_response({"link": link})
+
+    async def premium(self, req):
+        uid, _ = self.user_id(req)
+        p = await self.c.get_user(uid) or {}
+        return web.json_response({"premiumUntil": int(p.get("likes_view_until") or 0)})
 
     async def set_media(self, req):
         uid, _ = self.user_id(req)
@@ -432,6 +454,8 @@ class MiniApp:
         r.add_post("/app/api/register", self.register)
         r.add_post("/app/api/media", self.set_media)
         r.add_post("/app/api/delete", self.delete)
+        r.add_post("/app/api/invoice", self.invoice)
+        r.add_get("/app/api/premium", self.premium)
         r.add_get("/app/media/{fid}", self.media)
 
 
