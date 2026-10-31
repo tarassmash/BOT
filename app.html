@@ -207,7 +207,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   const untilText = t => { const d = new Date(t * 1000); return t * 1000 - Date.now() > 864e5 ? "до " + d.toLocaleDateString("uk", { day: "numeric", month: "long" }) : "сьогодні до " + d.toLocaleTimeString("uk", { hour: "2-digit", minute: "2-digit" }); };
   function plansHtml() {
     const ps = ME.plans || [];
-    if (!ps.length || !tg?.openInvoice) return "";
+    if (!ps.length) return "";
     const perDay = p => p.stars / p.days, best = ps.length > 1 ? ps.reduce((a, b) => perDay(b) < perDay(a) ? b : a) : null;
     return `<div class="plans">${ps.map(p => `<button class="plan ${p === best ? "best" : ""}" data-plan="${p.i}">${p === best ? "<em>Вигідно</em>" : ""}<b>⭐ ${p.stars}</b><span class="pt">${esc(p.title)}</span><small>≈ ${Math.max(1, Math.round(perDay(p)))} ⭐ / день</small></button>`).join("")}</div>
       <button class="linkish" data-terms>Умови оплати</button>`;
@@ -226,6 +226,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     btn && (btn.disabled = true);
     try { link = (await api("invoice", { plan: i })).link; } catch (e) { toast(e.message); btn && (btn.disabled = false); return; }
     const before = ME.me.premiumUntil || 0;
+    if (!tg?.openInvoice) { btn && (btn.disabled = false); tg?.openTelegramLink ? tg.openTelegramLink(link) : (location.href = link); return; }  // старий Telegram
     tg.openInvoice(link, async status => {
       btn && (btn.disabled = false);
       if (status === "paid") {
@@ -377,7 +378,13 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     const box = $("likesBox"); box.innerHTML = `<div class="empty"><div class="loader"></div></div>`;
     let r; try { r = await api("likes"); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
     ME.likes = r.count; setDot(r.count);
-    if (!r.count) { box.innerHTML = `<div class="empty"><div><b>Поки нових лайків немає</b>Гарне фото з усмішкою та кілька слів про себе дають у рази більше лайків 😉</div></div>`; return; }
+    if (!r.count) {
+      box.innerHTML = `<div style="text-align:center;padding-top:24px"><div style="font-size:44px">💌</div><h2>Поки нових лайків немає</h2><p class="muted">Гарне фото з усмішкою та кілька слів про себе дають у рази більше лайків 😉</p>
+        ${!isPrem() && plansHtml() ? `<div class="sec" style="margin-top:26px">💎 Преміум</div><p class="muted" style="margin:0">З Преміумом ти одразу бачиш кожного, хто тебе лайкне, — з фото й анкетою.</p>${plansHtml()}` : ""}
+        ${isPrem() ? `<div class="prem-on">💎 <b>Преміум активний</b> — ${untilText(ME.me.premiumUntil)}</div>` : ""}</div>`;
+      bindPlans(box, renderLikes);
+      return;
+    }
     if (!r.premium) {
       const share = `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("Знайомства для українців за кордоном ❤️")}`;
       box.innerHTML = `<div style="text-align:center"><div class="big">${r.count}</div><div>${r.count === 1 ? "людині" : "людям"} ти сподобався(-лась)</div>
@@ -527,6 +534,10 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     const share = `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("Знайомства для українців за кордоном ❤️ Спробуй — тут багато наших поруч!")}`;
     box.innerHTML = `
       <div id="pMedia"></div>
+      <div class="sec">💎 Преміум</div>
+      ${prem ? `<div class="prem-on">💎 <b>Преміум активний</b> — ${untilText(m.premiumUntil)}<br><span class="muted">Бачиш усіх, хто тебе лайкнув. Можна продовжити — дні додадуться.</span></div>`
+             : `<p style="margin:4px 2px">Побач усіх, кому ти сподобався(-лась), і відповідай взаємністю. Оплата зірками Telegram ⭐ — не виходячи з застосунку.</p>`}
+      <div id="pPlans">${plansHtml() || `<p class="muted" style="margin:4px 2px">Оплата тимчасово недоступна — запроси друга, щоб отримати Преміум.</p>`}</div>
       <div class="sec">Анкета</div>
       <div class="two"><div class="field"><label>Ім'я</label><input id="pName" maxlength="30" value="${esc(m.name)}"></div><div class="field"><label>Вік</label><input id="pAge" type="number" inputmode="numeric" min="18" max="70" value="${esc(m.age)}"></div></div>
       <div class="two"><div class="field"><label>Країна</label><select id="pCountry">${ME.countries.map(c => opt(c, m.country)).join("")}</select></div><div class="field"><label>Місто</label><input id="pCity" maxlength="40" value="${esc(m.city)}" placeholder="Аліканте"></div></div>
@@ -542,10 +553,6 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       <div class="field"><label>Країна пошуку</label><select id="fCountry">${opt("", f.country, `Моя (${m.country})`)}${ME.countries.map(c => opt(c, f.country)).join("")}</select></div>
       <div class="two"><div class="field"><label>Вік від</label><input id="fMin" type="number" inputmode="numeric" min="18" max="70" value="${esc(f.min_age ?? "")}" placeholder="18"></div><div class="field"><label>до</label><input id="fMax" type="number" inputmode="numeric" min="18" max="70" value="${esc(f.max_age ?? "")}" placeholder="70"></div></div>
       <button class="btn" id="saveF">Застосувати фільтри</button>
-      <div class="sec">💎 Преміум</div>
-      ${prem ? `<div class="prem-on">💎 <b>Преміум активний</b> — ${untilText(m.premiumUntil)}<br><span class="muted">Бачиш усіх, хто тебе лайкнув. Можна продовжити — дні додадуться.</span></div>`
-             : `<p style="margin:4px 2px">Побач усіх, кому ти сподобався(-лась), і відповідай взаємністю. Оплата зірками Telegram ⭐ — не виходячи з застосунку.</p>`}
-      <div id="pPlans">${plansHtml() || `<p class="muted" style="margin:4px 2px">Оплата тимчасово недоступна — запроси друга, щоб отримати Преміум.</p>`}</div>
       <div class="sec">Запроси друзів</div>
       <p style="margin:4px 2px">🎁 Коли друг створить анкету за твоїм посиланням, ви <b>обоє</b> отримаєте ${ME.premiumMinutes} хв Преміуму — побачите, хто вас лайкнув.</p>
       <p class="muted" style="margin:4px 2px">Ти вже запросив(-ла): <b>${ME.invited}</b></p>
