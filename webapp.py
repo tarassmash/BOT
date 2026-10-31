@@ -123,7 +123,15 @@ class MiniApp:
             "likes": likes,
             "superlikeWait": int(await c.superlike_wait(uid)),
             "ref": ref_link(bot_name, uid),
+            "supportUnread": await self.support_unread(uid),
         })
+
+    async def support_unread(self, uid):
+        try:
+            d = await self.c.firebase_get(self.c.db.collection("support").document(uid))
+            return int(((d.to_dict() or {}) if d and d.exists else {}).get("unread_user") or 0)
+        except Exception:
+            return 0
 
     async def next(self, req):
         uid, _ = self.user_id(req)
@@ -380,6 +388,32 @@ class MiniApp:
             return web.json_response({"error": "Не вдалося створити рахунок. Спробуй ще раз."}, status=400)
         return web.json_response({"link": link})
 
+    async def support_get(self, req):
+        uid, _ = self.user_id(req)
+        c = self.c
+        msgs = await c.support_messages(uid)
+        try:
+            await asyncio.to_thread(c.db.collection("support").document(uid).update, {"unread_user": 0})
+        except Exception:
+            pass  # ще не писав
+        return web.json_response({"messages": msgs})
+
+    async def support_post(self, req):
+        uid, tg_user = self.user_id(req)
+        b = await req.json()
+        text = str(b.get("text", "")).strip()
+        if not 2 <= len(text) <= self.c.SUPPORT_MAX:
+            return web.json_response({"error": f"Повідомлення — від 2 до {self.c.SUPPORT_MAX} символів"}, status=400)
+        last = await self.c.support_messages(uid, limit=5)
+        if sum(1 for m in last if m["from"] == "user" and m["ts"] > (time.time() - 60) * 1000) >= 3:
+            return web.json_response({"error": "Забагато повідомлень підряд — зачекай хвилинку"}, status=429)
+
+        class U:  # ім'я з Telegram, якщо анкети ще немає
+            first_name = tg_user.get("first_name") or ""
+            username = tg_user.get("username") or ""
+        await self.c.support_from_user(uid, text, "app", U)
+        return web.json_response({"messages": await self.c.support_messages(uid)})
+
     async def premium(self, req):
         uid, _ = self.user_id(req)
         p = await self.c.get_user(uid) or {}
@@ -456,6 +490,8 @@ class MiniApp:
         r.add_post("/app/api/delete", self.delete)
         r.add_post("/app/api/invoice", self.invoice)
         r.add_get("/app/api/premium", self.premium)
+        r.add_get("/app/api/support", self.support_get)
+        r.add_post("/app/api/support", self.support_post)
         r.add_get("/app/media/{fid}", self.media)
 
 

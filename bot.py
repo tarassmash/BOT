@@ -177,6 +177,10 @@ class GuardMiddleware(BaseMiddleware):
                     await event.answer("⛔️ Акаунт заблоковано", show_alert=True)
                 return
             # кнопка меню під час редагування/вводу — скасовує введення, а не потрапляє в анкету
+            # будь-яка команда скасовує незавершене звернення в підтримку
+            if isinstance(event, types.Message) and (event.text or "").startswith("/") and str(data.get("raw_state") or "").startswith("Support:"):
+                await data["state"].clear()
+                data["raw_state"] = None
             if isinstance(event, types.Message) and event.text in menu_texts():
                 raw = data.get("raw_state")
                 if raw and raw.startswith("Registration:"):
@@ -355,15 +359,119 @@ async def cmd_terms(message: types.Message):
         "• За порушення правил (фейки, спам, образи) анкету блокують без повернення коштів.\n\n"
         "Правила користування: /help", parse_mode="HTML")
 
-@dp.message(Command("paysupport"))
-async def cmd_paysupport(message: types.Message):
-    await message.answer(
-        "💬 <b>Підтримка з оплати</b>\n\n"
-        "Опиши проблему одним повідомленням у відповідь (дата оплати, скільки зірок) — його отримає адміністратор.\n"
-        "Якщо Преміум не активувався, ми перевіримо платіж і нарахуємо дні або повернемо зірки.", parse_mode="HTML")
+# =========================================================
+# ПІДТРИМКА: з застосунку, з чату (/support, /paysupport) і відповіді з адмінки або з Telegram
+# =========================================================
+class Support(StatesGroup):
+    message = State()   # користувач пише в підтримку
+    reply = State()     # адмін відповідає з Telegram
+
+SUPPORT_MAX = 2000
+
+async def support_add(uid, text, frm="user", source="chat", tg_user=None):
+    """Зберігає повідомлення в support/{uid}/msgs і оновлює звернення. frm: user | admin."""
+    uid = str(uid)
+    text = str(text or "").strip()[:SUPPORT_MAX]
+    if not text:
+        raise ValueError("Порожнє повідомлення")
+    now = time.time()
+    ref = db.collection("support").document(uid)
+    await asyncio.to_thread(ref.collection("msgs").document(f"{int(now * 1000):013d}").set,
+                            {"from": frm, "text": text, "ts": now, "source": source})
+    doc = await firebase_get(ref)
+    cur = (doc.to_dict() or {}) if doc and doc.exists else {}
+    upd = {"uid": uid, "last_ts": now, "last_text": text[:200], "last_from": frm}
+    if frm == "user":
+        p = await get_user(uid) or {}
+        upd.update({"status": "open", "unread_admin": int(cur.get("unread_admin") or 0) + 1,
+                    "name": p.get("name") or (tg_user.first_name if tg_user else "") or cur.get("name", ""),
+                    "username": p.get("username") or (tg_user.username if tg_user and tg_user.username else "") or cur.get("username", "")})
+        if not cur.get("created"):
+            upd["created"] = now
+    else:
+        upd.update({"unread_admin": 0, "unread_user": int(cur.get("unread_user") or 0) + 1})
+    await asyncio.to_thread(ref.set, upd, merge=True)
+    return upd
+
+async def support_from_user(uid, text, source, tg_user=None):
+    t = await support_add(uid, text, "user", source, tg_user)
+    src = {"app": "застосунок", "chat": "чат"}.get(source, source)
     for a in admin_ids():
-        await safe_send_message(a, f"💬 /paysupport від {esc(message.from_user.full_name)} (<code>{message.from_user.id}</code>"
-                                   f"{' @' + message.from_user.username if message.from_user.username else ''}). Подивіться оплати в адмінці.", parse_mode="HTML")
+        await safe_send_message(a, f"💬 <b>Підтримка</b> · {esc(t.get('name') or uid)}"
+                                   f"{' @' + esc(t['username']) if t.get('username') else ''} (<code>{uid}</code>, {src})\n\n{esc(text[:1500])}",
+                                parse_mode="HTML", reply_markup=ikb([[("✍️ Відповісти", f"sup:r:{uid}")]]))
+
+async def support_reply(uid, text, admin_name="", source="admin"):
+    """Відповідь адміна: зберігається в переписці й надсилається людині від імені бота."""
+    await support_add(uid, text, "admin", source)
+    return await safe_send_message(uid, f"💬 <b>Відповідь підтримки</b>\n\n{esc(text)}", parse_mode="HTML",
+                                   reply_markup=ikb([[open_btn("💬 Відкрити чат підтримки", "support", "sup:open")]]))
+
+async def support_messages(uid, limit=100):
+    ref = db.collection("support").document(str(uid))
+    docs = await asyncio.to_thread(lambda: list(ref.collection("msgs").get()))
+    rows = sorted(((d.to_dict() or {}) for d in docs), key=lambda r: r.get("ts", 0))[-limit:]
+    return [{"from": r.get("from"), "text": r.get("text", ""), "ts": int(float(r.get("ts") or 0) * 1000)} for r in rows]
+
+async def ask_support(message: types.Message, state: FSMContext, about_pay=False):
+    await state.set_state(Support.message)
+    await message.answer(
+        ("💬 <b>Підтримка з оплати</b>\n\nОпиши проблему одним повідомленням: коли оплачував(-ла), скільки зірок і що пішло не так.\n"
+         "Якщо Преміум не активувався — ми нарахуємо дні або повернемо зірки." if about_pay else
+         "💬 <b>Підтримка</b>\n\nНапиши одним повідомленням, що сталося або що підказати. Адміністратор відповість тут, у чаті з ботом."),
+        parse_mode="HTML", reply_markup=ikb([[("✖️ Скасувати", "sup:cancel")]]))
+
+@dp.message(Command("paysupport"))
+async def cmd_paysupport(message: types.Message, state: FSMContext):
+    await ask_support(message, state, about_pay=True)
+
+@dp.message(Command("support"))
+async def cmd_support(message: types.Message, state: FSMContext):
+    await ask_support(message, state)
+
+@dp.message(Support.message, F.text, ~F.text.startswith("/"))
+async def support_user_text(message: types.Message, state: FSMContext):
+    await state.clear()
+    try:
+        await support_from_user(message.from_user.id, message.text, "chat", message.from_user)
+    except ValueError:
+        return
+    await message.answer("✅ Повідомлення надіслано в підтримку. Відповідь прийде сюди, у чат з ботом.")
+
+@dp.message(Support.message)
+async def support_user_other(message: types.Message, state: FSMContext):
+    await message.answer("Напиши, будь ласка, текстом 🙂 (фото поки не приймаємо)")
+
+@dp.callback_query(F.data.startswith("sup:"))
+async def support_callback(callback: types.CallbackQuery, state: FSMContext):
+    parts = callback.data.split(":")
+    if parts[1] == "cancel":
+        await state.clear()
+        await callback.answer("Скасовано")
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        return
+    if parts[1] == "open":
+        await callback.answer()
+        return await ask_support(callback.message, state)
+    if parts[1] == "r" and str(callback.from_user.id) in admin_ids():
+        await callback.answer()
+        await state.set_state(Support.reply)
+        await state.update_data(reply_to=parts[2])
+        return await callback.message.answer(f"✍️ Напиши відповідь для <code>{parts[2]}</code> одним повідомленням (або /cancel):",
+                                             parse_mode="HTML")
+    await callback.answer()
+
+@dp.message(Support.reply, F.text, ~F.text.startswith("/"))
+async def support_admin_text(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    await state.clear()
+    if str(message.from_user.id) not in admin_ids():
+        return await message.answer("Скасовано.")
+    ok = await support_reply(data.get("reply_to"), message.text, source="telegram")
+    await message.answer("✅ Відповідь надіслано." if ok else "⚠️ Збережено в адмінці, але людина заблокувала бота — не доставлено.")
 
 # =========================================================
 # STATES
@@ -1804,7 +1912,7 @@ async def menu_more(message: types.Message, state: FSMContext):
         rows += [[(f"ℹ️ Про {name}", f"f:i:{cur['cid']}:{i}")], [(f"💌 Суперлайк: {name}", f"f:sl:{cur['cid']}:{i}")], [(f"🚨 Скарга: {name}", f"f:r:{cur['cid']}:{i}")]]
     await message.answer("☰ <b>Ще</b>", parse_mode="HTML", reply_markup=ikb(rows + [
         [("☕️ Вільний(-а) сьогодні", "me:coffee")],
-        [("💎 Преміум", "premium")],
+        [("💎 Преміум", "premium"), ("💬 Підтримка", "sup:open")],
         [("ℹ️ Як це працює", "more:help"), ("📜 Правила", "more:privacy")],
         [("⏸ Пауза анкети", "me:pause"), ("🗑 Видалити анкету", "me:del")],
     ]))
@@ -2007,7 +2115,8 @@ async def main():
             types.BotCommand(command="premium", description="💎 Преміум"),
             types.BotCommand(command="help", description="ℹ️ Як це працює"),
             types.BotCommand(command="terms", description="📄 Умови оплати"),
-            types.BotCommand(command="paysupport", description="💬 Підтримка з оплати"),
+            types.BotCommand(command="support", description="💬 Написати в підтримку"),
+            types.BotCommand(command="paysupport", description="💳 Підтримка з оплати"),
             types.BotCommand(command="start", description="🔄 Головне меню"),
         ])
     except Exception as e:
