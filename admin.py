@@ -12,6 +12,8 @@ import time
 from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
 
+from html import escape as html_escape
+
 from aiohttp import web
 from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter, TelegramBadRequest
 
@@ -219,7 +221,14 @@ class Admin:
             "topRef": [{"id": k, "name": names.get(k, ""), "n": n} for k, n in sorted(refs.items(), key=lambda x: -x[1])[:10]],
             "adminIds": sorted(self.c.admin_ids()),
             **(await self.pay_summary()),
+            "supportNew": await self.support_new(),
         })
+
+    async def support_new(self):
+        try:
+            return await asyncio.to_thread(lambda: sum(1 for d in self.c.db.collection("support").stream() if int((d.to_dict() or {}).get("unread_admin") or 0) > 0))
+        except Exception:
+            return 0
 
     async def pay_summary(self):
         try:
@@ -513,6 +522,54 @@ class Admin:
         self.cast["finished"] = int(time.time() * 1000)
         self.drop_cache()
 
+    # ---------- поддержка ----------
+    async def support_list(self, req):
+        st = req.query.get("status", "open")
+        def run():
+            return [{**(d.to_dict() or {}), "uid": d.id} for d in self.c.db.collection("support").stream()]
+        rows = await asyncio.to_thread(run)
+        if st == "open":
+            rows = [r for r in rows if r.get("status", "open") == "open"]
+        rows.sort(key=lambda r: (-(1 if int(r.get("unread_admin") or 0) else 0), -float(r.get("last_ts") or 0)))
+        return web.json_response([{"uid": r["uid"], "name": r.get("name", ""), "username": r.get("username", ""), "status": r.get("status", "open"),
+                                   "unread": int(r.get("unread_admin") or 0), "lastText": r.get("last_text", ""), "lastFrom": r.get("last_from", ""),
+                                   "ts": int(float(r.get("last_ts") or 0) * 1000)} for r in rows[:300]])
+
+    async def support_thread(self, req):
+        uid = req.match_info["id"]
+        ref = self.c.db.collection("support").document(uid)
+        def run():
+            head = ref.get()
+            msgs = sorted(((d.to_dict() or {}) for d in ref.collection("msgs").stream()), key=lambda r: r.get("ts", 0))
+            if head.exists and int((head.to_dict() or {}).get("unread_admin") or 0):
+                ref.update({"unread_admin": 0})
+            return (head.to_dict() or {}) if head.exists else None, msgs
+        head, msgs = await asyncio.to_thread(run)
+        if head is None:
+            return web.json_response({"error": "Обращение не найдено"}, status=404)
+        return web.json_response({"uid": uid, "name": head.get("name", ""), "username": head.get("username", ""), "status": head.get("status", "open"),
+                                  "messages": [{"from": m.get("from"), "text": m.get("text", ""), "source": m.get("source", ""), "ts": int(float(m.get("ts") or 0) * 1000)} for m in msgs[-300:]]})
+
+    async def support_action(self, req):
+        uid = req.match_info["id"]
+        b = await req.json()
+        ref = self.c.db.collection("support").document(uid)
+        if b.get("action") in ("close", "reopen"):
+            await asyncio.to_thread(ref.set, {"status": "closed" if b["action"] == "close" else "open", "unread_admin": 0}, merge=True)
+            return web.json_response({"ok": True})
+        text = str(b.get("text", "")).strip()[:2000]
+        if not text:
+            raise ValueError("Пустой ответ")
+        now = time.time()
+        def save():
+            ref.collection("msgs").document(f"{int(now * 1000):013d}").set({"from": "admin", "text": text, "ts": now, "source": "admin"})
+            cur = ref.get().to_dict() or {}
+            ref.set({"uid": uid, "last_ts": now, "last_text": text[:200], "last_from": "admin", "unread_admin": 0,
+                     "unread_user": int(cur.get("unread_user") or 0) + 1, "status": "closed" if b.get("close") else cur.get("status", "open")}, merge=True)
+        await asyncio.to_thread(save)
+        delivered = await self.try_send(uid, f"💬 <b>Відповідь підтримки</b>\n\n{html_escape(text)}\n\n<i>Відповісти: /support або «Профіль» → «💬 Підтримка» у застосунку</i>", html=True)
+        return web.json_response({"ok": True, "delivered": delivered})
+
     # ---------- оплаты (зірки Telegram) ----------
     async def load_payments(self, uid=None):
         def run():
@@ -669,6 +726,9 @@ class Admin:
         r.add_post("/admin/api/reports/{id}", self.report_action)
         r.add_get("/admin/api/broadcast", self.broadcast_status)
         r.add_post("/admin/api/broadcast", self.broadcast)
+        r.add_get("/admin/api/support", self.support_list)
+        r.add_get("/admin/api/support/{id}", self.support_thread)
+        r.add_post("/admin/api/support/{id}", self.support_action)
         r.add_get("/admin/api/payments", self.payments)
         r.add_post("/admin/api/payments/{id}", self.payment_action)
         r.add_get("/admin/api/settings", self.get_settings)

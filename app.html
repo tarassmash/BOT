@@ -101,6 +101,15 @@ h2 { margin: 0 0 4px; font-size: 22px; }
 .prem-on { background: color-mix(in srgb, var(--accent) 14%, var(--bg2)); border-radius: 14px; padding: 12px 14px; margin: 8px 0; }
 .linkish { color: var(--hint); text-decoration: underline; font-size: 13px; display: inline-block; margin-top: 6px; }
 
+/* підтримка */
+.sup-log { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding: 4px 0 10px; }
+.bub { max-width: 82%; padding: 9px 12px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; user-select: text; -webkit-user-select: text; }
+.bub small { display: block; font-size: 11px; opacity: .65; margin-top: 3px; }
+.bub.me { align-self: flex-end; background: var(--accent); color: var(--accent-text); border-bottom-right-radius: 5px; }
+.bub.adm { align-self: flex-start; background: var(--bg2); border-bottom-left-radius: 5px; }
+.bub.adm b { display: block; font-size: 12px; color: var(--accent); margin-bottom: 2px; }
+.badge-n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: var(--like); color: #fff; font: 700 12px/20px system-ui; }
+
 /* профіль */
 .me-photo { width: 100%; aspect-ratio: 3/4; max-height: 52vh; object-fit: cover; border-radius: 16px; background: var(--bg2); display: block; }
 .field { margin: 12px 0; }
@@ -198,7 +207,8 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     $("tabs").hidden = false;
     setDot(ME.likes);
     const start = (location.hash || "").slice(1);
-    if (["likes", "matches", "profile"].includes(start)) go(start); else loadNext();
+    if (start === "support") { go("profile"); openSupport(); }
+    else if (["likes", "matches", "profile"].includes(start)) go(start); else loadNext();
   }
   function setDot(n) { $("likesDot").hidden = !n; $("likesDot").textContent = n > 99 ? "99+" : n; }
 
@@ -219,8 +229,38 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   function showTerms() {
     sheet(`<h2>💎 Умови Преміуму</h2>${(ME.plans || []).map(p => `<p style="margin:6px 0">⭐ <b>${p.stars}</b> — ${esc(p.title)} (${p.days} дн.)</p>`).join("")}
       <p class="muted">Разова оплата зірками Telegram, без автосписань. Дні додаються до поточного строку. Оплачений Преміум зберігається, навіть якщо видалити анкету й створити нову.</p>
-      <p class="muted">Не активувався або щось пішло не так — напиши боту /paysupport, ми нарахуємо дні або повернемо зірки.</p>`);
+      <p class="muted">Не активувався або щось пішло не так — напиши в підтримку, ми нарахуємо дні або повернемо зірки.</p>
+      <button class="btn primary" id="tSup">💬 Написати в підтримку</button>`);
+    $("tSup").onclick = () => openSupport("Питання щодо оплати Преміуму: ");
   }
+  // ---------- підтримка ----------
+  let supTimer = null;
+  async function openSupport(prefill = "") {
+    sheet(`<h2>💬 Підтримка</h2><p class="muted" style="margin:0 0 8px">Напиши, що сталося, — адміністратор відповість тут і в чаті з ботом.</p>
+      <div class="sup-log" id="supLog"><div class="empty"><div class="loader"></div></div></div>
+      <textarea id="supText" maxlength="2000" placeholder="Твоє повідомлення…" style="min-height:80px"></textarea>
+      <button class="btn primary" id="supSend">Надіслати</button>`);
+    $("supText").value = prefill;
+    const draw = msgs => {
+      const log = $("supLog"); if (!log) return;
+      log.innerHTML = msgs.length ? msgs.map(m => `<div class="bub ${m.from === "admin" ? "adm" : "me"}">${m.from === "admin" ? "<b>Підтримка</b>" : ""}${esc(m.text)}<small>${new Date(m.ts).toLocaleString("uk", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</small></div>`).join("")
+        : `<p class="muted" style="text-align:center;margin:10px 0">Тут буде ваша переписка з підтримкою.</p>`;
+      log.scrollTop = log.scrollHeight;
+    };
+    const load = async () => { try { draw((await api("support")).messages); if (ME) ME.supportUnread = 0; const b = document.querySelector("#support .badge-n"); b && b.remove(); } catch (e) { $("supLog") && ($("supLog").innerHTML = `<p class="muted">${esc(e.message)}</p>`); } };
+    await load();
+    clearInterval(supTimer);
+    supTimer = setInterval(() => { if (!$("supLog") || !$("sheetBg").classList.contains("on")) return clearInterval(supTimer); load(); }, 15000);
+    $("supSend").onclick = async () => {
+      const text = $("supText").value.trim();
+      if (text.length < 2) return toast("Напиши повідомлення");
+      $("supSend").disabled = true;
+      try { draw((await api("support", { text })).messages); $("supText").value = ""; ok("success"); toast("✅ Надіслано. Відповідь прийде сюди й у чат з ботом."); }
+      catch (e) { toast(e.message); }
+      $("supSend").disabled = false;
+    };
+  }
+
   async function buyPremium(i, btn, after) {
     let link;
     btn && (btn.disabled = true);
@@ -558,6 +598,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       <p class="muted" style="margin:4px 2px">Ти вже запросив(-ла): <b>${ME.invited}</b></p>
       <div class="two"><button class="btn primary" id="share">📤 Надіслати другу</button><button class="btn" id="copy">🔗 Копіювати</button></div>
       <div class="sec">Ще</div>
+      <button class="btn" id="support">💬 Підтримка${ME.supportUnread ? `<span class="badge-n">${ME.supportUnread}</span>` : ""}</button>
       <button class="btn" id="rules">📜 Правила і безпека</button>
       <button class="btn danger" id="del">🗑 Видалити анкету</button>`;
     const media = (m.mediaRaw || []).map(x => ({ ...x }));
@@ -582,6 +623,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     $("share").onclick = () => tg.openTelegramLink(share);
     $("copy").onclick = async () => { try { await navigator.clipboard.writeText(ME.ref); toast("🔗 Посилання скопійовано"); } catch { sheet(`<h2>Твоє посилання</h2><input value="${esc(ME.ref)}" readonly onclick="this.select()">`); } };
     $("rules").onclick = showRules;
+    $("support").onclick = () => openSupport();
     $("del").onclick = () => {
       sheet(`<h2>Видалити анкету?</h2><p class="muted">Фото, лайки й симпатії буде стерто назавжди. Якщо хочеш перепочити — краще увімкни «⏸ Паузу».</p>
         <button class="btn" id="dPause">⏸ Краще пауза</button><button class="btn danger" id="dYes">🗑 Так, видалити назавжди</button>`);
