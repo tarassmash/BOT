@@ -83,6 +83,7 @@ class MiniApp:
             "hometown": p.get("hometown", ""),
             "sameHome": bool(me and c.same_home(me, p)),
             "free": c.is_free(p),
+            "goal": c.goal_of(p),
             "dist": d,
             "incoming": bool(incoming),
             "note": note or "",
@@ -226,7 +227,7 @@ class MiniApp:
         uid, _ = self.user_id(req)
         c = self.c
         b = await req.json()
-        fields, err = self.clean_profile({k: v for k, v in b.items() if k in ("name", "age", "country", "city", "hometown", "about", "gender", "search", "lat", "lon")}, partial=True)
+        fields, err = self.clean_profile({k: v for k, v in b.items() if k in ("name", "age", "country", "city", "hometown", "about", "gender", "search", "goal", "lat", "lon")}, partial=True)
         if err:
             return web.json_response({"error": err}, status=400)
         if "paused" in b:
@@ -322,6 +323,11 @@ class MiniApp:
             if b.get("gender") not in ("m", "f"):
                 return None, "Вкажи стать"
             f["gender"] = c.MEN if b["gender"] == "m" else c.WOMEN
+        if not partial or "goal" in b:
+            g = b.get("goal") or ("date" if not partial else None)  # без мети (стара версія застосунку) — пошук пари
+            if g not in c.GOALS:
+                return None, "Обери мету: пошук пари чи дружба"
+            f["goal"] = g
         if not partial or "search" in b:
             if b.get("search") not in ("m", "f"):
                 return None, "Вкажи, кого шукаєш"

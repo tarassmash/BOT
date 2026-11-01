@@ -132,6 +132,7 @@ class Admin:
         now = time.time()
         return {
             "id": u["id"],
+            "goal": "friends" if u.get("goal") == "friends" else "date",
             "name": u.get("name", ""),
             "age": u.get("age"),
             "country": u.get("country", ""),
@@ -265,6 +266,10 @@ class Admin:
             if st == "paused" and not u.get("paused"):
                 continue
             if st == "minor" and not (isinstance(u.get("age"), int) and u["age"] < 18):
+                continue
+            if st == "friends" and u.get("goal") != "friends":
+                continue
+            if st == "date" and u.get("goal") == "friends":
                 continue
             if text and text not in " ".join([u["id"], str(u.get("name", "")), str(u.get("username", "")), str(u.get("about", ""))]).lower():
                 continue

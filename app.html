@@ -180,6 +180,13 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .lbl { margin: 18px 2px 6px; font-weight: 600; }
 .chips.pick .chip { padding: 11px 15px; font-size: 15px; border: 1.5px solid transparent; }
 .chips.pick .chip.on { background: rgba(243, 196, 67, .16); border-color: var(--gold); color: var(--gold); }
+.goals { display: grid; gap: 12px; }
+.goal { display: grid; grid-template-columns: 56px 1fr; gap: 14px; align-items: center; text-align: left; padding: 18px 16px; border-radius: 22px; background: var(--deep); border: 2px solid transparent; transition: border-color .15s, background .15s; }
+.goal i { width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; font-style: normal; font-size: 28px; background: color-mix(in srgb, var(--gold) 14%, transparent); }
+.goal b { display: block; font: 700 19px/1.2 var(--display); }
+.goal span { color: var(--hint); font-size: 14.5px; }
+.goal.on { border-color: var(--gold); background: color-mix(in srgb, var(--gold) 10%, var(--deep)); }
+.tag.friends { background: color-mix(in srgb, var(--sky) 28%, transparent); }
 .agree { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; font-size: 15px; }
 .agree input { width: 22px; height: 22px; flex: none; margin-top: 2px; accent-color: var(--gold); }
 .agree a { color: var(--sky); }
@@ -474,6 +481,8 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   }
   const FLAGS = { "Україна": "ua", "Іспанія": "es", "Польща": "pl", "Німеччина": "de", "Чехія": "cz", "Італія": "it" };
   const flag = (country, cls = "") => FLAGS[country] ? `<i class="flag ${FLAGS[country]} ${cls}" aria-hidden="true"></i>` : "";
+  const WANT = { date: [["f", "👩 Дівчину"], ["m", "👱‍♂️ Хлопця"]], friends: [["m", "👱‍♂️ Друга"], ["f", "👩 Подругу"]] };
+  const isFriends = () => ME?.me?.goal === "friends";
   function showTop() { $("top").hidden = false; $("here").innerHTML = (flag(ME.me?.country) || "📍") + " " + esc(ME.me?.city || ME.me?.country || "Поруч"); }
 
   // ---------- привітання для нових: з першої секунди видно, що це для наших за кордоном ----------
@@ -697,7 +706,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     return `<div class="route">${c.hometown ? `${flag("Україна")}${esc(c.hometown)} <span class="arr">→</span> ` : ""}${flag(c.country)}${esc(now)}${km}</div>`;
   }
   function tagsHtml(c) {
-    const t = [c.incoming ? `<span class="tag in">❤️ Ти сподобався(-лась)</span>` : "", c.sameHome ? `<span class="tag home">🤝 Земляки</span>` : "", c.free ? `<span class="tag coffee">☕️ Можна на каву сьогодні</span>` : ""].filter(Boolean);
+    const t = [c.goal === "friends" ? `<span class="tag friends">🤝 Дружба</span>` : "", c.incoming ? `<span class="tag in">❤️ Ти сподобався(-лась)</span>` : "", c.sameHome ? `<span class="tag home">🤝 Земляки</span>` : "", c.free ? `<span class="tag coffee">☕️ Можна на каву сьогодні</span>` : ""].filter(Boolean);
     return t.length ? `<div class="tags">${t.join("")}</div>` : "";
   }
   function renderCard() {
@@ -820,7 +829,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     const mine = ME?.me?.media?.[0]?.url || (ME?.me?.mediaRaw || [])[0]?.url || "";
     $("match").innerHTML = `<div class="orn t" aria-hidden="true"></div>
       <div class="pair">${mine ? `<img src="${mine}" alt="">` : ""}${m.photo ? `<img src="${m.photo}" alt="">` : ""}</div>
-      <h2>Це взаємно!</h2><p class="muted" style="margin:0 0 18px">Ти і ${esc(m.name)} сподобались одне одному. Напиши першим(-ою) — українською 🙂</p>
+      <h2>Це взаємно!</h2><p class="muted" style="margin:0 0 18px">${isFriends() ? `Ви з ${esc(m.name)} обоє хочете подружитися. Напиши першим(-ою) — домовтеся про каву ☕️` : `Ти і ${esc(m.name)} сподобались одне одному. Напиши першим(-ою) — українською 🙂`}</p>
       ${m.username ? `<button class="btn primary" id="mWrite">💬 Написати</button>` : `<p class="muted">Контакт ми надіслали в чат з ботом.</p>`}
       <button class="btn" id="mNext">Дивитися далі</button>
       <div class="orn b" aria-hidden="true"></div>`;
@@ -951,13 +960,17 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 
   // ---------- реєстрація в застосунку ----------
   function wizard() {
-    const R = { name: ME.name || "", age: "", gender: "", search: "", country: "", city: "", hometown: "", about: "", media: [], lat: null, lon: null, agree: false };
+    const R = { goal: "", name: ME.name || "", age: "", gender: "", search: "", country: "", city: "", hometown: "", about: "", media: [], lat: null, lon: null, agree: false };
     let step = 0;
     const chips = (list, cur, key) => `<div class="chips pick">${list.map(([v, t]) => `<button class="chip ${cur === v ? "on" : ""}" data-k="${key}" data-v="${esc(v)}">${esc(t)}</button>`).join("")}</div>`;
     const steps = [
+      { t: "Що шукаєш?", h: () => `<p class="muted" style="margin:-6px 2px 14px">Покажемо людей, які шукають те саме. Змінити можна будь-коли в профілі.</p><div class="goals">
+          <button class="goal ${R.goal === "date" ? "on" : ""}" data-k="goal" data-v="date"><i>💞</i><div><b>Пошук пари</b><span>Побачення, стосунки, кохання — з нашими поруч.</span></div></button>
+          <button class="goal ${R.goal === "friends" ? "on" : ""}" data-k="goal" data-v="friends"><i>🤝</i><div><b>Дружба</b><span>Друзі для кави, прогулянок і свят — щоб не самому за кордоном.</span></div></button></div>`,
+        ok: () => R.goal ? true : "Обери, що шукаєш" },
       { t: "Як тебе звати?", h: () => `<input id="wName" maxlength="30" value="${esc(R.name)}" placeholder="Ім'я" autocomplete="given-name">`, ok: () => (R.name = $("wName").value.trim()).length >= 2 || "Ім'я — від 2 символів" },
       { t: "Скільки тобі років?", h: () => `<input id="wAge" type="number" inputmode="numeric" min="18" max="70" value="${esc(R.age)}" placeholder="Наприклад, 27"><p class="muted">Бот лише для дорослих — від ${ME.minAge} років.</p>`, ok: () => { R.age = $("wAge").value; return (+R.age >= ME.minAge && +R.age <= 70) || `Вік від ${ME.minAge} до 70`; } },
-      { t: "Хто ти і кого шукаєш?", h: () => `<div class="lbl">Я</div>${chips([["m", "👱‍♂️ Хлопець"], ["f", "👩 Дівчина"]], R.gender, "gender")}<div class="lbl">Шукаю</div>${chips([["f", "👩 Дівчину"], ["m", "👱‍♂️ Хлопця"]], R.search, "search")}`, ok: () => (R.gender && R.search) ? true : "Обери обидва варіанти" },
+      { t: () => R.goal === "friends" ? "Хто ти і з ким хочеш дружити?" : "Хто ти і кого шукаєш?", h: () => `<div class="lbl">Я</div>${chips([["m", "👱‍♂️ Хлопець"], ["f", "👩 Дівчина"]], R.gender, "gender")}<div class="lbl">${R.goal === "friends" ? "Хочу знайти" : "Шукаю"}</div>${chips(WANT[R.goal === "friends" ? "friends" : "date"], R.search, "search")}`, ok: () => (R.gender && R.search) ? true : "Обери обидва варіанти" },
       { t: "Де ти живеш?", h: () => `<div class="lbl">Країна</div><div class="chips pick">${ME.countries.map(c => `<button class="chip ${R.country === c ? "on" : ""}" data-k="country" data-v="${esc(c)}" style="display:inline-flex;align-items:center;gap:7px">${flag(c)}${esc(c)}</button>`).join("")}</div><div class="lbl">Місто</div><input id="wCity" maxlength="40" value="${esc(R.city)}" placeholder="Наприклад, Аліканте">`, ok: () => { R.city = $("wCity").value.trim(); return (R.country && R.city.length >= 2) ? true : "Обери країну й напиши місто"; } },
       { t: "Твої фото", h: () => `<div id="wMedia"></div>`, after: () => mediaEditor($("wMedia"), R.media), ok: () => R.media.length > 0 || "Додай хоча б одне фото" },
       { t: "Звідки ти і хто ти?", h: () => `<div class="lbl" style="margin-top:0">Звідки ти родом в Україні?</div><p class="muted" style="margin:0 2px 6px;font-size:14px">Земляків покажемо першими й позначимо 🤝</p>${chips(ME.hometowns.map(c => [c, c]), R.hometown, "hometown")}<input id="wHome" maxlength="40" value="${esc(ME.hometowns.includes(R.hometown) ? "" : R.hometown)}" placeholder="Інше місто"><div class="lbl">Кілька слів про себе</div><textarea id="wAbout" maxlength="700" placeholder="Чим займаєшся, кого шукаєш, куди підемо на першу каву">${esc(R.about)}</textarea>`,
@@ -971,7 +984,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       const s = steps[step];
       $("stage").innerHTML = `<div class="wiz"><div class="orn" aria-hidden="true" style="margin:0 -12px 12px"></div><div style="display:flex;justify-content:flex-end;margin:-4px 0 8px"><button class="x-close" data-close aria-label="Закрити застосунок"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><div class="wbar">${steps.map((_, k) => `<i class="${k <= step ? "on" : ""}"></i>`).join("")}</div>
         ${step ? `<button class="wback" id="wBack">‹ Назад</button>` : ""}
-        <h2>${s.t}</h2><div class="wbody">${s.h()}</div>
+        <h2>${typeof s.t === "function" ? s.t() : s.t}</h2><div class="wbody">${s.h()}</div>
         <button class="btn primary" id="wNext">${step === steps.length - 1 ? "Створити анкету ❤️" : "Далі"}</button></div>`;
       $("stage").querySelectorAll("[data-k]").forEach(b => b.onclick = () => { R[b.dataset.k] = b.dataset.v; if (b.dataset.k === "hometown" && $("wHome")) $("wHome").value = ""; if ($("wCity")) R.city = $("wCity").value; if ($("wAbout")) R.about = $("wAbout").value; draw(); hap("soft"); });
       s.after && s.after();
@@ -1012,7 +1025,8 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       <div class="sec">Про тебе</div>
       <div class="two"><div class="field"><label>Ім'я</label><input id="pName" maxlength="30" value="${esc(m.name)}"></div><div class="field"><label>Вік</label><input id="pAge" type="number" inputmode="numeric" min="18" max="70" value="${esc(m.age)}"></div></div>
       <div class="two"><div class="field"><label>Країна</label><select id="pCountry">${ME.countries.map(c => opt(c, m.country)).join("")}</select></div><div class="field"><label>Місто</label><input id="pCity" maxlength="40" value="${esc(m.city)}" placeholder="Аліканте"></div></div>
-      <div class="two"><div class="field"><label>Я</label><select id="pGender">${opt("m", m.gender, "Хлопець")}${opt("f", m.gender, "Дівчина")}</select></div><div class="field"><label>Шукаю</label><select id="pSearch">${opt("f", m.search, "Дівчину")}${opt("m", m.search, "Хлопця")}</select></div></div>
+      <div class="field"><label>Що шукаю</label><select id="pGoal">${opt("date", m.goal || "date", "💞 Пошук пари")}${opt("friends", m.goal, "🤝 Дружба")}</select></div>
+      <div class="two"><div class="field"><label>Я</label><select id="pGender">${opt("m", m.gender, "Хлопець")}${opt("f", m.gender, "Дівчина")}</select></div><div class="field"><label id="pSearchL">${m.goal === "friends" ? "Хочу знайти" : "Шукаю"}</label><select id="pSearch">${WANT[m.goal === "friends" ? "friends" : "date"].map(([v, t]) => opt(v, m.search, t.replace(/^\S+\s/, ""))).join("")}</select></div></div>
       <div class="field"><label>Звідки родом в Україні</label><input id="pHome" maxlength="40" value="${esc(m.hometown)}" placeholder="Львів"></div>
       <div class="field"><label>Про себе</label><textarea id="pAbout" maxlength="700">${esc(m.about)}</textarea></div>
       <button class="btn primary" id="save">Зберегти</button>
@@ -1040,9 +1054,14 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     onMedia.needOne = true;
     mediaEditor($("pMedia"), media, onMedia);
     bindPlans($("pPlans"), () => view === "profile" && renderProfile());
+    $("pGoal").onchange = () => {
+      const g = $("pGoal").value === "friends" ? "friends" : "date", cur = $("pSearch").value;
+      $("pSearchL").textContent = g === "friends" ? "Хочу знайти" : "Шукаю";
+      $("pSearch").innerHTML = WANT[g].map(([v, t]) => opt(v, cur, t.replace(/^\S+\s/, ""))).join("");
+    };
     $("save").onclick = async () => {
-      const body = { name: $("pName").value, age: $("pAge").value, country: $("pCountry").value, city: $("pCity").value, gender: $("pGender").value, search: $("pSearch").value, hometown: $("pHome").value, about: $("pAbout").value };
-      try { await api("profile", body); Object.assign(ME.me, { ...body, age: +body.age }); nextCard = null; ok("success"); toast("✅ Збережено"); } catch (e) { toast(e.message); }
+      const body = { goal: $("pGoal").value, name: $("pName").value, age: $("pAge").value, country: $("pCountry").value, city: $("pCity").value, gender: $("pGender").value, search: $("pSearch").value, hometown: $("pHome").value, about: $("pAbout").value };
+      try { const goalChanged = (ME.me.goal || "date") !== body.goal; await api("profile", body); Object.assign(ME.me, { ...body, age: +body.age }); nextCard = null; if (goalChanged) card = null; ok("success"); toast(goalChanged ? (body.goal === "friends" ? "✅ Тепер шукаємо друзів 🤝" : "✅ Тепер шукаємо пару 💞") : "✅ Збережено"); } catch (e) { toast(e.message); }
     };
     $("loc").onclick = async () => { try { const l = await getLocation(); await api("profile", l); m.location = true; $("loc").textContent = "📍 Оновити локацію"; ok("success"); toast("📍 Локацію оновлено"); } catch (e) { toast(e.message); } };
     $("tFree").onclick = async e => { const on = !e.target.classList.contains("on"); try { await api("profile", { free: on }); e.target.classList.toggle("on", on); ME.me.freeUntil = on ? Date.now() / 1000 + 86400 : 0; hap(); } catch (x) { toast(x.message); } };
