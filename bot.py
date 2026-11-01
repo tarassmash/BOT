@@ -109,7 +109,7 @@ SETTINGS = {
     "welcome_back": "❤️ З поверненням!",
     "countries": list(COUNTRIES),
     "premium_minutes": 10,
-    "plans": [{"days": 7, "stars": 250}, {"days": 30, "stars": 750}, {"days": 90, "stars": 1750}],  # Преміум за зірки: ≈5 € / 15 € / 35 €
+    "plans": [{"days": 7, "stars": 250}],  # Преміум за зірки: один пакет — тиждень ≈5 €
     "star_eur": 0.02,  # скільки євро приблизно платить людина за 1 зірку (250 ⭐ ≈ 5 € у магазинах застосунків)
     "payments": True,
     "report_hide": 3,
@@ -137,7 +137,7 @@ async def load_settings():
         for k, v in (doc.to_dict() or {}).items():
             if k in SETTINGS and v not in (None, "", []):
                 SETTINGS[k] = v
-    if SETTINGS.get("plans") == OLD_DEFAULT_PLANS:
+    if SETTINGS.get("plans") in (OLD_DEFAULT_PLANS, PREV_DEFAULT_PLANS):
         SETTINGS["plans"] = list(DEFAULT_PLANS)
 
 async def save_settings(new):
@@ -227,8 +227,10 @@ dp.callback_query.outer_middleware(GuardMiddleware())
 # Обробники стоять тут, вище за кроки реєстрації: платіж, що прийшов посеред анкети,
 # не має потрапити у відповідь на питання.
 # =========================================================
-DEFAULT_PLANS = [{"days": 7, "stars": 250}, {"days": 30, "stars": 750}, {"days": 90, "stars": 1750}]
-OLD_DEFAULT_PLANS = [{"days": 7, "stars": 75}, {"days": 30, "stars": 250}, {"days": 90, "stars": 600}]  # перші ціни (≈1,5 € за тиждень) — замінюємо на нові, якщо їх не міняли в адмінці
+DEFAULT_PLANS = [{"days": 7, "stars": 250}]  # один пакет: тиждень ≈5 €
+OLD_DEFAULT_PLANS = [{"days": 7, "stars": 75}, {"days": 30, "stars": 250}, {"days": 90, "stars": 600}]  # перші ціни (≈1,5 € за тиждень)
+PREV_DEFAULT_PLANS = [{"days": 7, "stars": 250}, {"days": 30, "stars": 750}, {"days": 90, "stars": 1750}]  # тиждень / місяць / 3 місяці
+# якщо в адмінці ціни не міняли (стоять колишні стандартні) — переходимо на новий стандарт
 
 def plans():
     """Тарифи з адмінки: [{"days": 7, "stars": 75}, ...]"""
