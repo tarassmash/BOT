@@ -180,6 +180,12 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .lbl { margin: 18px 2px 6px; font-weight: 600; }
 .chips.pick .chip { padding: 11px 15px; font-size: 15px; border: 1.5px solid transparent; }
 .chips.pick .chip.on { background: rgba(243, 196, 67, .16); border-color: var(--gold); color: var(--gold); }
+.why h3 { font: 700 16px/1.2 var(--display); color: var(--gold); margin: 18px 0 4px; display: flex; gap: 8px; align-items: center; }
+.why ul { list-style: none; margin: 0; padding: 0; }
+.why li { display: grid; grid-template-columns: 40px 1fr; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.why li i { width: 40px; height: 40px; border-radius: 13px; display: grid; place-items: center; font-style: normal; font-size: 20px; background: color-mix(in srgb, var(--gold) 12%, transparent); }
+.why li b { display: block; font-size: 15px; }
+.why li span { color: var(--hint); font-size: 14px; }
 .goals { display: grid; gap: 12px; }
 .goal { display: grid; grid-template-columns: 56px 1fr; gap: 14px; align-items: center; text-align: left; padding: 18px 16px; border-radius: 22px; background: var(--deep); border: 2px solid transparent; transition: border-color .15s, background .15s; }
 .goal i { width: 56px; height: 56px; border-radius: 18px; display: grid; place-items: center; font-style: normal; font-size: 28px; background: color-mix(in srgb, var(--gold) 14%, transparent); }
@@ -932,6 +938,20 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       } else viaBrowser();
     });
   }
+  // ---------- «Чому FlirtUA» — 20 причин ----------
+  const WHY = [
+    ["Для наших", "🇺🇦", [["🌍", "Створено для українців за кордоном", "Іспанія, Польща, Німеччина, Чехія, Італія — лише ті, хто живе поруч."], ["💬", "Українською з першого слова", "Не треба переходити на англійську чи місцеву мову."], ["🤝", "Земляки першими", "Люди з твого міста в Україні — вище в стрічці й з позначкою."], ["🧭", "Видно, звідки людина", "На анкеті маршрут: «Львів → Валенсія»."], ["📍", "Люди поруч", "Анкети за відстанню: твоє місто, твій район."]]],
+    ["Знайомство без зайвого", "☕️", [["☕️", "«Вільний сьогодні»", "Позначка на 24 години — кава після роботи без тижнів переписки."], ["💞", "Пара або дружба — на вибір", "Окремі стрічки, нічого не змішується."], ["👭", "Дружба по-чесному", "Шукаєш подругу — бачиш дівчат, які теж шукають подругу."], ["💌", "Суперлайк з повідомленням", "Раз на добу — щоб тебе помітили першим."], ["⚡️", "Взаємно — і одразу пишеш", "Кнопка «Написати» відкриває чат у Telegram."]]],
+    ["Просто й зручно", "📱", [["📱", "Просто в Telegram", "Нічого не встановлювати — ні пошти, ні паролів."], ["⏱", "Анкета за хвилину", "Кілька коротких кроків, до 3 фото чи відео."], ["🔔", "Не пропустиш симпатію", "Сповіщення в Telegram, нагадування вдень, а не вночі."], ["🎁", "Безкоштовно", "Анкети, лайки, симпатії й листування — без оплати."], ["💶", "Чесна ціна Преміуму", "Тиждень ≈5 € зірками Telegram, або безкоштовно за друга."]]],
+    ["Безпечно", "🛡", [["🔞", "Лише 18+", "Тільки дорослі."], ["🚨", "Скарги перевіряє людина", "Після кількох скарг анкета ховається автоматично."], ["🔒", "Приватність", "Іншим видно лише відстань у км, не адресу."], ["⏸", "Пауза будь-коли", "Лайки й симпатії збережуться. Або видали назавжди."], ["🙋", "Жива підтримка", "Пишеш у «Підтримку» — відповідає людина."]]],
+  ];
+  function showWhy() {
+    const share = ME?.ref ? `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("FlirtUA — знайомства й дружба для українців за кордоном ❤️ Спробуй!")}` : "";
+    sheet(`<div class="why"><h2>20 причин обрати FlirtUA</h2><p class="muted" style="margin:0">Звичайні додатки зроблені для всіх. FlirtUA — для наших.</p>
+      ${WHY.map(([t, ic, items]) => `<h3><span aria-hidden="true">${ic}</span>${esc(t)}</h3><ul>${items.map(([e, b, x]) => `<li><i aria-hidden="true">${e}</i><div><b>${esc(b)}</b><span>${esc(x)}</span></div></li>`).join("")}</ul>`).join("")}
+      ${share ? `<button class="btn primary" id="whyShare" style="margin-top:16px">📤 Розповісти друзям</button>` : ""}</div>`);
+    if (share) $("whyShare").onclick = () => tg.openTelegramLink(share);
+  }
   function showRules() { sheet(`<h2>📜 Правила</h2><div class="about">${richText(ME.rules)}</div><div class="about muted">${richText(ME.disclaimer)}</div><button class="btn" onclick="this.closest('.sheet-bg')?.classList.remove('on')">Зрозуміло</button>`); }
 
   // редактор фото/відео: до 3, перше — головне
@@ -1044,6 +1064,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       <div class="two"><button class="btn primary" id="share">📤 Надіслати другу</button><button class="btn" id="copy">🔗 Копіювати</button></div>
       <div class="sec">Ще</div>
       <button class="btn" id="support">💬 Підтримка${ME.supportUnread ? `<span class="badge-n">${ME.supportUnread}</span>` : ""}</button>
+      <button class="btn" id="why">✨ Чому FlirtUA — 20 причин</button>
       <button class="btn" id="rules">📜 Правила і безпека</button>
       <button class="btn danger" id="del">🗑 Видалити анкету</button>`;
     const media = (m.mediaRaw || []).map(x => ({ ...x }));
@@ -1073,6 +1094,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     $("share").onclick = () => tg.openTelegramLink(share);
     $("copy").onclick = async () => { try { await navigator.clipboard.writeText(ME.ref); toast("🔗 Посилання скопійовано"); } catch { sheet(`<h2>Твоє посилання</h2><input value="${esc(ME.ref)}" readonly onclick="this.select()">`); } };
     $("rules").onclick = showRules;
+    $("why").onclick = showWhy;
     $("support").onclick = () => openSupport();
     $("del").onclick = () => {
       sheet(`<h2>Видалити анкету?</h2><p class="muted">Фото, лайки й симпатії буде стерто назавжди. Якщо хочеш перепочити — краще увімкни «⏸ Паузу».</p>
