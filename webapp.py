@@ -100,7 +100,8 @@ class MiniApp:
         p = await c.get_user(uid)
         bot_name = await c.bot_username()
         common = {"bot": bot_name, "countries": list(c.countries()), "reasons": c.REPORT_REASONS, "premiumMinutes": c.premium_minutes(),
-                  "plans": [{"i": i, "days": p["days"], "stars": p["stars"], "title": c.plan_title(p["days"])} for i, p in enumerate(c.plans())] if c.payments_on() else [],
+                  "plans": [{"i": i, "days": p["days"], "stars": p["stars"], "title": c.plan_title(p["days"]), "name": c.plan_name(p["days"]), "eur": c.eur(p["stars"])} for i, p in enumerate(c.plans())] if c.payments_on() else [],
+                  "starEur": c.star_eur(),
                   "minAge": c.MIN_AGE, "hometowns": c.HOMETOWNS, "rules": c.privacy_text(), "disclaimer": c.SETTINGS.get("disclaimer", ""),
                   "name": (tg_user.get("first_name") or "")[:30]}
         if not p:
