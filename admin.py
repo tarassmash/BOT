@@ -685,6 +685,8 @@ class Admin:
             s["plans"] = sorted(pl, key=lambda x: x["days"])[:6]
         if "payments" in b:
             s["payments"] = bool(b["payments"])
+        if "app_only" in b:
+            s["app_only"] = bool(b["app_only"])
         if "star_eur" in b:
             v = float(b["star_eur"] or 0)
             if not 0.001 <= v <= 1:

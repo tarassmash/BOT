@@ -217,6 +217,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           <div class="field" style="flex:0 1 220px"><label for="sHide">Скрывать после жалоб от N людей</label><input id="sHide" type="number" min="0" max="50"><span class="hint">0 — не скрывать автоматически.</span></div>
         </div>
         <div class="card" style="background:var(--soft);border:0;margin:6px 0 12px">
+          <h3>📱 Только приложение</h3>
+          <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="sAppOnly"> Всё в приложении — в чате бота только кнопка «Відкрити FlirtUA»</label>
+          <span class="hint" style="font-size:12.5px;color:var(--muted)">В чате остаются уведомления о лайках и симпатиях, оплата, поддержка и ваши админ-команды. Меню команд бота обновится после перезапуска сервиса.</span>
+        </div>
+        <div class="card" style="background:var(--soft);border:0;margin:6px 0 12px">
           <h3>💎 Премиум за звёзды Telegram</h3>
           <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="sPay"> Продавать Премиум (оплата прямо в боте и в приложении)</label>
           <div class="field" style="max-width:260px;margin-top:10px"><label for="sStarEur">Сколько стоит 1 звезда для клиента, €</label><input id="sStarEur" type="number" step="0.001" min="0.001" max="1"><span class="hint">≈0,02 € (250 ⭐ ≈ 5 € в магазинах приложений). По нему в боте показывается цена в евро.</span></div>
@@ -581,6 +586,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     $("sAdmins").value = (s.admin_ids || []).join(", ");
     $("sPremium").value = s.premium_minutes; $("sHide").value = s.report_hide;
     $("sPay").checked = s.payments !== false;
+    $("sAppOnly").checked = s.app_only !== false;
     $("sStarEur").value = s.star_eur ?? 0.02;
     $("sStarEur").oninput = () => $("sPlans").querySelectorAll(".pStars").forEach(i => i.oninput());
     $("sPlans").innerHTML = ""; (s.plans || []).forEach(planRow);
@@ -596,6 +602,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     };
     body.privacy = $("sPriv").value;
     body.payments = $("sPay").checked;
+    body.app_only = $("sAppOnly").checked;
     body.star_eur = +$("sStarEur").value || 0.02;
     body.plans = [...$("sPlans").querySelectorAll(".plan-row")].map(r => ({ days: +r.querySelector(".pDays").value, stars: +r.querySelector(".pStars").value })).filter(p => p.days || p.stars);
     try { await api("/admin/api/settings", body); $("sMsg").textContent = "Сохранено ✓"; setTimeout(() => $("sMsg").textContent = "", 3000); stats = null; }

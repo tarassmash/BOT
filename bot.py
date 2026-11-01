@@ -115,6 +115,7 @@ SETTINGS = {
     "report_hide": 3,
     "admin_ids": [],
     "nudges": True,
+    "app_only": True,  # усе — у застосунку: у чаті лише кнопка «Відкрити», сповіщення, оплата й підтримка
 }
 ENV_ADMINS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
 BANNED = set()
@@ -179,6 +180,21 @@ class GuardMiddleware(BaseMiddleware):
                 elif isinstance(event, types.CallbackQuery):
                     await event.answer("⛔️ Акаунт заблоковано", show_alert=True)
                 return
+            # режим «лише застосунок»: усе, що не сповіщення/оплата/підтримка, ведемо в застосунок
+            if app_only() and uid not in admin_ids():
+                raw = str(data.get("raw_state") or "")
+                if isinstance(event, types.Message) and not raw.startswith(("Support:", "EditProfile:")):
+                    cmd = (event.text or "").split()[0].split("@")[0].lower() if (event.text or "").startswith("/") else ""
+                    if cmd not in APP_ONLY_COMMANDS:
+                        if raw and data.get("state"):
+                            await data["state"].clear()
+                        txt = event.text or ""
+                        tab = {"/likes": "likes", "/profile": "profile", "/search": "feed"}.get(cmd) or (
+                            "likes" if txt in [B_LIKES] + OLD_LIKES else "profile" if txt in [B_ME] + OLD_ME else "feed")
+                        return await send_app_only(event.chat.id, tab)
+                if isinstance(event, types.CallbackQuery) and not (event.data or "").startswith(APP_ONLY_CALLBACKS) and event.data != "premium":
+                    await event.answer()
+                    return await send_app_only(event.from_user.id)
             # кнопка меню під час редагування/вводу — скасовує введення, а не потрапляє в анкету
             # будь-яка команда скасовує незавершене звернення в підтримку
             if isinstance(event, types.Message) and (event.text or "").startswith("/") and str(data.get("raw_state") or "").startswith("Support:"):
@@ -353,11 +369,15 @@ async def send_premium(chat_id, uid):
 
 @dp.message(Command("premium"))
 async def cmd_premium(message: types.Message, state: FSMContext):
+    if app_only():
+        return await send_app_only(message.chat.id, "profile", "💎 Преміум — у застосунку: «Профіль» → «Преміум» 👇")
     await send_premium(message.chat.id, str(message.from_user.id))
 
 @dp.callback_query(F.data == "premium")
 async def cb_premium(callback: types.CallbackQuery):
     await callback.answer()
+    if app_only():
+        return await send_app_only(callback.from_user.id, "profile", "💎 Преміум — у застосунку: «Профіль» → «Преміум» 👇")
     await send_premium(callback.message.chat.id, str(callback.from_user.id))
 
 @dp.callback_query(F.data.startswith("buy:"))
@@ -569,6 +589,17 @@ def app_button():
 
 def app_on():
     return app_url().startswith("https://")
+
+def app_only():
+    return app_on() and SETTINGS.get("app_only", True) is not False
+
+# що лишається в чаті в режимі «лише застосунок»
+APP_ONLY_COMMANDS = {"/start", "/support", "/paysupport", "/terms", "/help", "/myid", "/admin", "/premium", "/cancel"}
+APP_ONLY_CALLBACKS = ("sup:", "buy:", "adm_", "x:del", "noop")
+APP_ONLY_TEXT = "❤️ Анкети, лайки, симпатії й Преміум — у застосунку FlirtUA 👇"
+
+async def send_app_only(chat_id, tab="feed", text=APP_ONLY_TEXT):
+    await safe_send_message(chat_id, text, reply_markup=ikb([[open_btn("❤️ Відкрити FlirtUA", tab)]]))
 
 def get_main_menu():
     if app_on():
@@ -1223,6 +1254,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         referrer = args[0][4:] if args and args[0].startswith("ref_") else None
         if await get_user(user_id):
             await state.clear()
+            if app_only():
+                await message.answer(SETTINGS["welcome_back"], reply_markup=types.ReplyKeyboardRemove())
+                return await message.answer("Анкети, лайки й симпатії — у застосунку 👇", reply_markup=ikb([[open_btn("❤️ Відкрити FlirtUA", "feed")]]))
             if app_on():
                 await message.answer(SETTINGS["welcome_back"], reply_markup=get_main_menu())  # прибирає стару клавіатуру
                 return await message.answer("Анкети, лайки й симпатії — у застосунку 👇\nАбо кнопка «❤️ Знайомства» зліва від поля вводу.",
@@ -1233,6 +1267,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
             await state.update_data(referrer=referrer)
             # якщо людина створить анкету в застосунку — бонус за запрошення теж зарахується
             await firebase_set(db.collection("pending_ref").document(user_id), {"ref": referrer, "ts": int(time.time())})
+        if app_only():
+            await message.answer("👋", reply_markup=types.ReplyKeyboardRemove())
+            await message.answer(SETTINGS["onboarding"], parse_mode="HTML", reply_markup=ikb([[open_btn("❤️ Створити анкету", "feed")]]))
+            return
         if app_on():
             await message.answer("👋 Привіт!", reply_markup=get_main_menu())
             await message.answer(SETTINGS["onboarding"], parse_mode="HTML", reply_markup=ikb([
@@ -2130,17 +2168,24 @@ async def main():
             logging.warning("📱 Застосунок вимкнено: згенеруйте домен у Railway (Settings → Networking) або задайте WEBAPP_URL")
     
     try:
-        await bot.set_my_commands([
-            types.BotCommand(command="search", description="👥 Дивитися анкети"),
-            types.BotCommand(command="likes", description="❤️ Мої лайки"),
-            types.BotCommand(command="profile", description="👤 Моя анкета"),
-            types.BotCommand(command="premium", description="💎 Преміум"),
-            types.BotCommand(command="help", description="ℹ️ Як це працює"),
-            types.BotCommand(command="terms", description="📄 Умови оплати"),
-            types.BotCommand(command="support", description="💬 Написати в підтримку"),
-            types.BotCommand(command="paysupport", description="💳 Підтримка з оплати"),
-            types.BotCommand(command="start", description="🔄 Головне меню"),
-        ])
+        if app_only():
+            await bot.set_my_commands([
+                types.BotCommand(command="start", description="❤️ Відкрити знайомства"),
+                types.BotCommand(command="support", description="💬 Підтримка"),
+                types.BotCommand(command="terms", description="📄 Умови оплати"),
+            ])
+        else:
+            await bot.set_my_commands([
+                types.BotCommand(command="search", description="👥 Дивитися анкети"),
+                types.BotCommand(command="likes", description="❤️ Мої лайки"),
+                types.BotCommand(command="profile", description="👤 Моя анкета"),
+                types.BotCommand(command="premium", description="💎 Преміум"),
+                types.BotCommand(command="help", description="ℹ️ Як це працює"),
+                types.BotCommand(command="terms", description="📄 Умови оплати"),
+                types.BotCommand(command="support", description="💬 Написати в підтримку"),
+                types.BotCommand(command="paysupport", description="💳 Підтримка з оплати"),
+                types.BotCommand(command="start", description="🔄 Головне меню"),
+            ])
     except Exception as e:
         logging.error(f"set_my_commands: {e}")
     print("🚀 Бот запускається...")
