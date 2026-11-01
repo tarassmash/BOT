@@ -741,6 +741,8 @@ class Admin:
         r.add_get("/admin/api/settings", self.get_settings)
         r.add_post("/admin/api/settings", self.put_settings)
         r.add_get("/admin/photo/{fid}", self.photo)
+        from design import DesignTool  # дизайн застосунку й картинки екранів (fal.ai)
+        DesignTool(self).setup(r)
         return app
 
 
