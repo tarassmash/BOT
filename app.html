@@ -227,6 +227,101 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .match .btn { max-width: 340px; }
 @media (prefers-reduced-motion: no-preference) { .match.on .pair img { animation: meet .5s cubic-bezier(.2, .9, .3, 1.2) both; } .match.on .pair img + img { animation-delay: .08s; } }
 @keyframes meet { from { transform: scale(.6); opacity: 0; } }
+/* прапори: малюємо самі — емодзі-прапорців немає у Windows */
+.flag { display: inline-block; width: 20px; height: 14px; border-radius: 3px; flex: none; vertical-align: -2px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
+.flag.ua { background: linear-gradient(#0057B7 50%, #FFD500 50%); }
+.flag.es { background: linear-gradient(#AA151B 25%, #F1BF00 25% 75%, #AA151B 75%); }
+.flag.pl { background: linear-gradient(#F5F5F5 50%, #DC143C 50%); }
+.flag.de { background: linear-gradient(#111 33.3%, #DD0000 33.3% 66.6%, #FFCE00 66.6%); }
+.flag.it { background: linear-gradient(90deg, #009246 33.3%, #F4F5F0 33.3% 66.6%, #CE2B37 66.6%); }
+.flag.cz { background: linear-gradient(to bottom right, #11457E 50%, transparent 50.5%) top left / 50% 50% no-repeat, linear-gradient(to top right, #11457E 50%, transparent 50.5%) bottom left / 50% 50% no-repeat, linear-gradient(#F5F5F5 50%, #D7141A 50%); }
+.flag.big { width: 34px; height: 24px; border-radius: 5px; }
+.flag.wave { position: relative; overflow: hidden; }
+.flag.wave::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 20%, rgba(255,255,255,.45) 40%, transparent 60%); transform: translateX(-120%); }
+
+/* онбординг */
+.ob { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden; }
+.ob .orn { transform-origin: left; }
+.ob-brand { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px 0; }
+.ob-track { flex: 1; min-height: 0; display: flex; transition: transform .5s cubic-bezier(.2, .8, .2, 1); touch-action: pan-y; }
+.ob-slide { flex: 0 0 100%; min-width: 0; overflow-y: auto; padding: 12px 20px 8px; display: flex; flex-direction: column; }
+.ob-slide h1 { font: 800 clamp(34px, 10.5vw, 46px)/1 var(--display); letter-spacing: -.035em; margin: 18px 0 10px; }
+.ob-slide h2 { font-size: 26px; margin: 8px 0 6px; }
+.ob-slide .lead { font-size: 16px; color: var(--hint); margin: 0; }
+.couple { width: 100%; height: auto; display: block; border-radius: 26px; box-shadow: 0 20px 50px rgba(3, 10, 30, .5); }
+.countries { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.countries span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px 6px 7px; border-radius: 999px; background: var(--deep); font-size: 13.5px; font-weight: 600; }
+.vs { display: grid; gap: 8px; margin-top: 16px; }
+.vs-row { display: grid; grid-template-columns: 1fr 1fr; border-radius: 18px; overflow: hidden; background: var(--deep); }
+.vs-row > div { padding: 11px 12px; font-size: 14px; line-height: 1.35; }
+.vs-row .them { color: var(--hint); }
+.vs-row .them s { text-decoration-color: rgba(226, 57, 75, .8); text-decoration-thickness: 1.5px; }
+.vs-row .us { background: rgba(243, 196, 67, .1); font-weight: 600; }
+.vs-row small { display: block; font-size: 11.5px; color: var(--hint); font-weight: 600; margin-bottom: 2px; }
+.vs-head { display: grid; grid-template-columns: 1fr 1fr; font-size: 13px; font-weight: 700; padding: 0 12px; }
+.vs-head span:last-child { color: var(--gold); display: flex; align-items: center; gap: 6px; }
+.feat { display: grid; gap: 10px; margin-top: 16px; }
+.feat > div { display: grid; grid-template-columns: 48px 1fr; gap: 12px; align-items: center; padding: 12px; border-radius: 18px; background: var(--deep); }
+.feat i { width: 48px; height: 48px; border-radius: 15px; background: rgba(243, 196, 67, .12); display: grid; place-items: center; font-style: normal; font-size: 24px; }
+.feat b { display: block; }
+.feat span { color: var(--hint); font-size: 14px; }
+.ob-foot { padding: 10px 20px calc(14px + var(--safe-bottom)); }
+.ob-foot small { display: block; text-align: center; color: var(--hint); margin-top: 10px; font-size: 13px; }
+.dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 12px; }
+.dots i { width: 7px; height: 7px; border-radius: 4px; background: var(--deep2); transition: width .3s, background .3s; }
+.dots i.on { width: 22px; background: var(--gold); }
+.ob-skip { color: var(--hint); font-size: 14px; font-weight: 600; padding: 6px 4px; }
+
+/* штампи при свайпі, сердечка, конфеті */
+.stamp { position: absolute; top: 36px; z-index: 3; padding: 6px 14px; border-radius: 12px; font: 800 26px/1 var(--display); border: 3px solid; opacity: 0; pointer-events: none; background: rgba(14, 30, 69, .35); }
+.stamp.yes { left: 18px; color: var(--gold); border-color: var(--gold); transform: rotate(-12deg); }
+.stamp.no { right: 18px; color: #FF8A95; border-color: #FF8A95; transform: rotate(12deg); }
+.burst { position: fixed; z-index: 35; pointer-events: none; font-size: 18px; }
+.confetti { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.confetti i { position: absolute; top: -12px; width: 8px; height: 12px; border-radius: 2px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .view.on { animation: viewIn .22s ease both; }
+  @keyframes viewIn { from { opacity: 0; transform: translateY(6px); } }
+  .card.enter { animation: cardIn .38s cubic-bezier(.2, .9, .3, 1.1) both; }
+  @keyframes cardIn { from { opacity: 0; transform: scale(.93) translateY(10px); } }
+  .card.out { transition: transform .32s cubic-bezier(.4, 0, .9, .4), opacity .32s; }
+  .flag.wave { animation: flutter 2.6s ease-in-out infinite; transform-origin: left center; }
+  @keyframes flutter { 50% { transform: skewY(-4deg) scaleX(.96); } }
+  .flag.wave::after { animation: sheen 3.2s ease-in-out infinite 1s; }
+  @keyframes sheen { 0% { transform: translateX(-120%); } 45%, 100% { transform: translateX(120%); } }
+  .ob > .orn { animation: stitchIn 1.1s steps(18) both; }
+  @keyframes stitchIn { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  .ob-slide.on .rise { animation: rise .6s cubic-bezier(.2, .8, .2, 1) both; }
+  .ob-slide.on .rise:nth-child(2) { animation-delay: .08s; } .ob-slide.on .rise:nth-child(3) { animation-delay: .16s; } .ob-slide.on .rise:nth-child(4) { animation-delay: .24s; }
+  .ob-slide.on .vs-row, .ob-slide.on .feat > div { animation: rise .5s cubic-bezier(.2, .8, .2, 1) both; }
+  .ob-slide.on .vs-row:nth-child(3), .ob-slide.on .feat > div:nth-child(2) { animation-delay: .09s; }
+  .ob-slide.on .vs-row:nth-child(4), .ob-slide.on .feat > div:nth-child(3) { animation-delay: .18s; }
+  .ob-slide.on .vs-row:nth-child(5), .ob-slide.on .feat > div:nth-child(4) { animation-delay: .27s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(16px); } }
+  .couple .float-heart path { animation: heartFloat 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes heartFloat { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-8px) scale(1.1); } }
+  .couple .stars circle, .couple .win rect { animation: twinkle 2.8s ease-in-out infinite; }
+  .couple .stars circle:nth-child(2n), .couple .win rect:nth-child(2n) { animation-delay: 1.1s; }
+  .couple .stars circle:nth-child(3n), .couple .win rect:nth-child(3n) { animation-delay: 1.9s; }
+  @keyframes twinkle { 50% { opacity: .25; } }
+  .couple .sun { animation: glow 4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes glow { 50% { transform: scale(1.07); opacity: .75; } }
+  .couple .rib1, .couple .rib2 { animation: sway 2.4s ease-in-out infinite; transform-box: fill-box; transform-origin: top center; }
+  .couple .rib2 { animation-delay: .3s; }
+  @keyframes sway { 50% { transform: rotate(7deg); } }
+  .plan.best::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(110deg, transparent 30%, rgba(243, 196, 67, .22) 50%, transparent 70%); background-size: 250% 100%; animation: shimmer 3.4s ease-in-out infinite; pointer-events: none; }
+  @keyframes shimmer { 0% { background-position: 130% 0; } 60%, 100% { background-position: -30% 0; } }
+  .round.like.pop { animation: pop .35s cubic-bezier(.3, 1.6, .5, 1); }
+  @keyframes pop { 40% { transform: scale(1.18); } }
+  .burst { animation: burst .9s cubic-bezier(.2, .8, .3, 1) forwards; }
+  @keyframes burst { to { transform: translate(var(--x), var(--y)) scale(.6) rotate(var(--r)); opacity: 0; } }
+  .confetti i { animation: fall var(--d) linear var(--delay) forwards; }
+  @keyframes fall { to { transform: translate(var(--x), 110vh) rotate(var(--r)); } }
+  .match.on h2 { animation: rise .5s cubic-bezier(.2, .8, .2, 1) .15s both; }
+  .card.enter .tag.home { animation: rise .45s cubic-bezier(.2, .8, .2, 1) .25s both; }
+}
+
 .toast { position: fixed; left: 50%; bottom: calc(96px + var(--safe-bottom)); transform: translateX(-50%); background: var(--linen); color: var(--night); font-weight: 600; padding: 11px 16px; border-radius: 14px; z-index: 40; font-size: 14px; max-width: calc(100% - 32px); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
 </style>
 </head>
@@ -316,27 +411,121 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     if (start === "support") { go("profile"); openSupport(); }
     else if (["likes", "matches", "profile"].includes(start)) go(start); else loadNext();
   }
-  function showTop() { $("top").hidden = false; $("here").textContent = "📍 " + (ME.me?.city || ME.me?.country || "Поруч"); }
+  const FLAGS = { "Україна": "ua", "Іспанія": "es", "Польща": "pl", "Німеччина": "de", "Чехія": "cz", "Італія": "it" };
+  const flag = (country, cls = "") => FLAGS[country] ? `<i class="flag ${FLAGS[country]} ${cls}" aria-hidden="true"></i>` : "";
+  function showTop() { $("top").hidden = false; $("here").innerHTML = (flag(ME.me?.country) || "📍") + " " + esc(ME.me?.city || ME.me?.country || "Поруч"); }
 
   // ---------- привітання для нових: з першої секунди видно, що це для наших за кордоном ----------
+  // ---------- онбординг: з першої секунди видно, що це для наших за кордоном ----------
+  const COUPLE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 300" class="couple" role="img" aria-label="Закохана пара українців дивиться на вечірнє місто за кордоном">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1B3375"/><stop offset=".7" stop-color="#2C4C96"/><stop offset="1" stop-color="#E9A65A"/></linearGradient>
+    <radialGradient id="sun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFE38A"/><stop offset=".6" stop-color="#F3C443"/><stop offset="1" stop-color="#F3C443" stop-opacity="0"/></radialGradient>
+    <linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#132656"/><stop offset="1" stop-color="#0E1E45"/></linearGradient>
+    <pattern id="vysh" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="#F5EEE2"/><path d="M4 1l3 3-3 3-3-3z" fill="#E2394B"/><rect x="3.4" y="3.4" width="1.2" height="1.2" fill="#0E1E45"/></pattern>
+    <clipPath id="frame"><rect width="360" height="300" rx="28"/></clipPath>
+  </defs>
+  <g clip-path="url(#frame)">
+    <rect width="360" height="300" fill="url(#sky)"/>
+    <g class="stars" fill="#F5EEE2"><circle cx="40" cy="36" r="1.4"/><circle cx="92" cy="22" r="1"/><circle cx="300" cy="30" r="1.5"/><circle cx="330" cy="70" r="1"/><circle cx="250" cy="18" r="1"/><circle cx="20" cy="90" r="1"/><circle cx="140" cy="50" r="1.1"/></g>
+    <circle class="sun" cx="180" cy="190" r="92" fill="url(#sun)" opacity=".9"/>
+    <circle cx="180" cy="190" r="44" fill="#FFD866"/>
+    <!-- місто за кордоном: дахи, вежа, купол, пальми -->
+    <g fill="#24407F">
+      <path d="M0 214h28v-26l14-12 14 12v26h20v-40h22v40h14v-58l9-14 9 14v58h18v-30h26v30h10v-48a20 20 0 0 1 40 0v48h12v-36h30v36h18v-22l12-10 12 10v22h50v90H0z"/>
+    </g>
+    <g fill="#F3C443" opacity=".85" class="win"><rect x="80" y="182" width="4" height="5"/><rect x="88" y="196" width="4" height="5"/><rect x="128" y="176" width="3" height="5"/><rect x="128" y="196" width="3" height="5"/><rect x="262" y="194" width="4" height="5"/><rect x="274" y="184" width="4" height="5"/><rect x="40" y="198" width="4" height="5"/></g>
+    <g fill="#1B3370"><path d="M330 214c-1-18 2-30 6-40-8 4-16 2-22-2 8-2 14-5 20-9-8-3-14-8-17-14 9 3 16 6 21 11 1-8 5-15 11-19-2 8-2 16 0 23 6-3 13-3 19 0-8 1-14 4-18 9 7 2 12 7 14 13-7-4-13-5-19-4-3 10-4 21-3 32z"/></g>
+    <path d="M0 238c60-18 120-22 180-18s120 12 180 0v80H0z" fill="url(#hill)"/>
+    <!-- пара зі спини -->
+    <g class="pair-fig">
+      <!-- він -->
+      <g transform="translate(150 152)">
+        <path d="M-26 92c0-40 6-66 26-66s26 26 26 66z" fill="url(#vysh)"/>
+        <path d="M-26 92c0-40 6-66 26-66s26 26 26 66z" fill="#F5EEE2" opacity=".55"/>
+        <rect x="-26" y="80" width="52" height="7" fill="#E2394B"/><rect x="-26" y="83" width="52" height="1.5" fill="#0E1E45"/>
+        <rect x="-18" y="92" width="14" height="40" rx="5" fill="#1E3570"/><rect x="4" y="92" width="14" height="40" rx="5" fill="#1E3570"/>
+        <rect x="-6" y="18" width="12" height="12" fill="#D9A27E"/>
+        <circle cx="-16" cy="10" r="3.5" fill="#E8B48F"/><circle cx="16" cy="10" r="3.5" fill="#E8B48F"/>
+        <circle cx="0" cy="7" r="16" fill="#4A2C1E"/>
+        <path d="M-14 14c4 4 9 6 14 6s10-2 14-6v4c-4 4-9 6-14 6s-10-2-14-6z" fill="#3A2216"/>
+      </g>
+      <!-- вона -->
+      <g transform="translate(206 158)">
+        <path d="M-24 86c0-36 6-60 24-60s24 24 24 60z" fill="url(#vysh)"/>
+        <path d="M-30 126l8-44h44l8 44z" fill="#E2394B"/>
+        <path d="M-30 126l8-44h44l8 44z" fill="#B71E33" opacity=".35"/>
+        <rect x="-5" y="16" width="10" height="12" fill="#D9A27E"/>
+        <path d="M-15 8c0-14 7-22 15-22s15 8 15 22l-2 30c-4 2-9 2-13 0s-9-2-13 0z" fill="#8A5A2B"/>
+        <path d="M-3 20c-1 14 0 30 3 44 3-14 4-30 3-44z" fill="#7A4C22"/>
+        <!-- вінок -->
+        <g class="vinok"><circle cx="-13" cy="-6" r="4.5" fill="#E2394B"/><circle cx="-6" cy="-12" r="4.5" fill="#F3C443"/><circle cx="2" cy="-14" r="4.5" fill="#E2394B"/><circle cx="10" cy="-11" r="4.5" fill="#5FB3FF"/><circle cx="15" cy="-4" r="4.5" fill="#F3C443"/><circle cx="-2" cy="-17" r="2" fill="#3FA65F"/><circle cx="12" cy="-16" r="2" fill="#3FA65F"/></g>
+        <!-- стрічки синя й жовта -->
+        <path class="rib1" d="M8 -6c4 20 2 44 8 64" stroke="#0057B7" stroke-width="4" fill="none" stroke-linecap="round"/>
+        <path class="rib2" d="M13 -4c6 20 6 40 14 58" stroke="#FFD500" stroke-width="4" fill="none" stroke-linecap="round"/>
+      </g>
+      <!-- руки тримаються -->
+      <path d="M172 210c6 6 12 8 16 6" stroke="#E8B48F" stroke-width="8" stroke-linecap="round" fill="none"/>
+    </g>
+    <!-- серце над парою -->
+    <g class="float-heart" transform="translate(180 120)"><path d="M0 14S-16 4-16-6c0-6 5-10 10-10 3 0 5 2 6 4 1-2 3-4 6-4 5 0 10 4 10 10C16 4 0 14 0 14z" fill="#E2394B"/></g>
+  </g>
+</svg>`;
   function hello() {
     $("actions").hidden = true;
-    const where = (ME.countries || []).join(", ").replace(/, ([^,]*)$/, " та $1");
-    $("stage").innerHTML = `<div class="hello">
+    const cs = ME.countries || [];
+    const slides = [
+      `<div class="rise">${COUPLE}</div>
+       <h1 class="rise">Наші поруч.</h1>
+       <p class="lead rise">Знайомства для українців, які живуть за кордоном. Українською — з людьми, які розуміють тебе з півслова.</p>
+       <div class="countries rise">${cs.map(c => `<span>${flag(c)}${esc(c)}</span>`).join("")}</div>`,
+      `<h2 class="rise">Чим ми інші</h2><p class="lead rise">Звичайні додатки знайомств зроблені для всіх. FlirtUA — для наших.</p>
+       <div class="vs">
+         <div class="vs-head"><span class="muted">Звичайні додатки</span><span>${flag("Україна")}FlirtUA</span></div>
+         <div class="vs-row"><div class="them"><small>Хто в стрічці</small><s>Місцеві й туристи</s></div><div class="us"><small>Хто в стрічці</small>Українці, які живуть поруч</div></div>
+         <div class="vs-row"><div class="them"><small>Мова</small><s>Англійська чи місцева</s></div><div class="us"><small>Мова</small>Українська з першого слова</div></div>
+         <div class="vs-row"><div class="them"><small>Спільне</small><s>Пояснюєш, звідки ти</s></div><div class="us"><small>Спільне</small>Земляки з твого міста — першими 🤝</div></div>
+         <div class="vs-row"><div class="them"><small>Як почати</small><s>Новий додаток, пошта, пароль</s></div><div class="us"><small>Як почати</small>Просто в Telegram, за хвилину</div></div>
+       </div>`,
+      `<h2 class="rise">Зроблено для нашого життя тут</h2><p class="lead rise">Того, що нижче, немає в звичайних додатках.</p>
+       <div class="feat">
+         <div><i>🤝</i><div><b>Земляки</b><span>Люди з твого Львова, Харкова чи Одеси — вище в стрічці й з позначкою.</span></div></div>
+         <div><i>📍</i><div><b>Поруч з тобою</b><span>Анкети за відстанню: твоє місто, твій район. Іншим видно лише км, не адресу.</span></div></div>
+         <div><i>☕️</i><div><b>Вільний сьогодні</b><span>Позначка на 24 години — кава після роботи без тижнів переписки.</span></div></div>
+         <div><i>💌</i><div><b>Суперлайк з повідомленням</b><span>Раз на добу — напиши одразу, щоб тебе помітили першим(-ою).</span></div></div>
+       </div>`,
+      `<h2 class="rise">Безпечно й по-людськи</h2><p class="lead rise">Знайомства, у яких хочеться залишитися.</p>
+       <div class="feat">
+         <div><i>🔞</i><div><b>Лише 18+</b><span>Тільки дорослі — вік вказується при реєстрації, анкети молодших не показуємо.</span></div></div>
+         <div><i>🚨</i><div><b>Скарги перевіряє модератор</b><span>Фейки, спам і образи — одна кнопка, людина перевіряє анкету.</span></div></div>
+         <div><i>⏸</i><div><b>Пауза будь-коли</b><span>Сховай анкету на час — лайки й симпатії збережуться.</span></div></div>
+         <div><i>🎁</i><div><b>Безкоштовно</b><span>Знайомитись можна без оплати. Преміум — за бажанням.</span></div></div>
+       </div>`,
+    ];
+    $("stage").innerHTML = `<div class="ob">
       <div class="orn big" aria-hidden="true"></div>
-      <div class="art">
-        <div class="brand" style="font-size:22px"><i aria-hidden="true"></i><span>Flirt<b>UA</b></span></div>
-        <h1>Наші поруч.</h1>
-        <p class="lead">Знайомства українською для тих, хто живе за кордоном: ${esc(where)}.</p>
-      </div>
-      <ul>
-        <li><i>🤝</i><div><b>Земляки першими</b><span>Люди з твого міста в Україні — на початку стрічки й з позначкою.</span></div></li>
-        <li><i>📍</i><div><b>Поруч з тобою</b><span>Анкети відсортовані за відстанню: твоє місто, твій район.</span></div></li>
-        <li><i>☕️</i><div><b>Вільний сьогодні</b><span>Позначка на 24 години — для кави після роботи без довгих переписок.</span></div></li>
-      </ul>
-      <div class="go"><button class="btn primary" id="hGo">Створити анкету</button><small>Безкоштовно · лише 18+ · одна хвилина</small></div>
-    </div>`;
-    $("hGo").onclick = () => { hap("medium"); wizard(); };
+      <div class="ob-brand"><div class="brand" style="font-size:20px"><i aria-hidden="true"></i><span>Flirt<b>UA</b></span><i class="flag ua big wave" style="margin-left:6px;background-size:auto"></i></div><button class="ob-skip" id="obSkip">Пропустити</button></div>
+      <div class="ob-track" id="obTrack">${slides.map((h, k) => `<section class="ob-slide" data-k="${k}">${h}</section>`).join("")}</div>
+      <div class="ob-foot"><div class="dots" id="obDots">${slides.map(() => "<i></i>").join("")}</div>
+        <button class="btn primary" id="obNext">Далі</button><small id="obNote" hidden>Безкоштовно · лише 18+ · одна хвилина</small></div></div>`;
+    let k = 0;
+    const show = n => {
+      k = Math.max(0, Math.min(slides.length - 1, n));
+      $("obTrack").style.transform = `translateX(${-k * 100}%)`;
+      document.querySelectorAll(".ob-slide").forEach(sl => sl.classList.toggle("on", +sl.dataset.k === k));
+      document.querySelectorAll("#obDots i").forEach((d, x) => d.classList.toggle("on", x === k));
+      const last = k === slides.length - 1;
+      $("obNext").textContent = last ? "Створити анкету" : "Далі";
+      $("obSkip").style.visibility = last ? "hidden" : "";
+      $("obNote").hidden = !last;
+      hap("soft");
+    };
+    $("obNext").onclick = () => k < slides.length - 1 ? show(k + 1) : (hap("medium"), wizard());
+    $("obSkip").onclick = () => show(slides.length - 1);
+    let sx = null;
+    $("obTrack").addEventListener("pointerdown", e => { sx = e.clientX; });
+    $("obTrack").addEventListener("pointerup", e => { if (sx == null) return; const d = e.clientX - sx; sx = null; if (Math.abs(d) > 50) show(k + (d < 0 ? 1 : -1)); });
+    show(0);
   }
   function setDot(n) { $("likesDot").hidden = !n; $("likesDot").textContent = n > 99 ? "99+" : n; }
 
@@ -448,7 +637,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   // маршрут людини: звідки в Україні → де живе зараз
   function routeHtml(c) {
     const now = c.city || c.country, km = c.dist != null && c.dist < 999 ? `<span class="km">${c.dist < 1 ? "поруч" : c.dist + " км"}</span>` : "";
-    return `<div class="route">${c.hometown ? `${esc(c.hometown)} <span class="arr">→</span> ` : ""}${esc(now)}${km}</div>`;
+    return `<div class="route">${c.hometown ? `${flag("Україна")}${esc(c.hometown)} <span class="arr">→</span> ` : ""}${flag(c.country)}${esc(now)}${km}</div>`;
   }
   function tagsHtml(c) {
     const t = [c.incoming ? `<span class="tag in">❤️ Ти сподобався(-лась)</span>` : "", c.sameHome ? `<span class="tag home">🤝 Земляки</span>` : "", c.free ? `<span class="tag coffee">☕️ Можна на каву сьогодні</span>` : ""].filter(Boolean);
@@ -456,11 +645,12 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   }
   function renderCard() {
     const c = card, n = c.media.length;
-    $("stage").innerHTML = `<div class="card" id="card">${n > 1 ? `<div class="bars">${c.media.map((_, i) => `<i class="${i <= idx ? "on" : ""}"></i>`).join("")}</div>` : ""}
+    $("stage").innerHTML = `<div class="card${idx === 0 && !c._shown ? " enter" : ""}" id="card"><div class="stamp yes">ТАК</div><div class="stamp no">ДАЛІ</div>${n > 1 ? `<div class="bars">${c.media.map((_, i) => `<i class="${i <= idx ? "on" : ""}"></i>`).join("")}</div>` : ""}
       ${mediaEl(c.media[idx] || c.media[0])}
       <div class="shade"></div>
       <div class="who"><h3>${esc(c.name)}<span>, ${esc(c.age)}</span></h3>${routeHtml(c)}${tagsHtml(c)}</div>
       <button class="info-btn" id="info" aria-label="Більше про людину"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button></div>`;
+    c._shown = true;
     $("actions").hidden = false;
     $("info").onclick = e => { e.stopPropagation(); openInfo(); };
     drag($("card"));
@@ -472,19 +662,34 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       if (!down) return;
       dx = e.clientX - x0; dy = e.clientY - y0;
       if (Math.abs(dx) > 6) moved = true;
-      el.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;  // картка йде за пальцем, без анімацій і написів
+      el.classList.remove("enter");
+      el.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;  // картка йде за пальцем
+      el.querySelector(".stamp.yes").style.opacity = Math.max(0, Math.min(1, dx / 90));
+      el.querySelector(".stamp.no").style.opacity = Math.max(0, Math.min(1, -dx / 90));
     };
     el.onpointerup = el.onpointercancel = e => {
       if (!down) return; down = false;
       if (dx > 90) return act("like");
       if (dx < -90) return act("skip");
-      el.style.transform = "";
+      el.style.transform = ""; el.querySelectorAll(".stamp").forEach(x => (x.style.opacity = 0));
       if (!moved && card.media.length > 1) {   // тап: ліва/права частина — попереднє/наступне фото
         const r = el.getBoundingClientRect();
         idx = (e.clientX - r.left < r.width / 2) ? Math.max(0, idx - 1) : Math.min(card.media.length - 1, idx + 1);
         renderCard(); hap("soft");
       }
     };
+  }
+  // сердечка з кнопки лайка
+  function burst(btn) {
+    if (!btn || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    btn.classList.remove("pop"); void btn.offsetWidth; btn.classList.add("pop");
+    const r = btn.getBoundingClientRect();
+    for (let n = 0; n < 9; n++) {
+      const h = document.createElement("span"); h.className = "burst"; h.textContent = n % 3 ? "❤️" : (n % 2 ? "💛" : "💙");
+      const a = -Math.PI / 2 + (Math.random() - .5) * 2.2, d = 70 + Math.random() * 70;
+      h.style.cssText = `left:${r.left + r.width / 2 - 9}px;top:${r.top + r.height / 2 - 12}px;--x:${Math.cos(a) * d}px;--y:${Math.sin(a) * d}px;--r:${(Math.random() - .5) * 90}deg`;
+      document.body.appendChild(h); setTimeout(() => h.remove(), 950);
+    }
   }
   $("bLike").onclick = () => act("like");
   $("bNope").onclick = () => act("skip");
@@ -493,8 +698,17 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     if (busy || !card) return;
     busy = true; hap(action === "like" ? "medium" : "light");
     const c = card; card = null;
+    const el = $("card"), reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (action === "like") burst($("bLike"));
+    if (el && !reduce) {   // картка відлітає в бік рішення
+      const dir = action === "like" ? 1 : -1;
+      el.querySelector(`.stamp.${action === "like" ? "yes" : "no"}`).style.opacity = 1;
+      el.classList.remove("enter"); el.classList.add("out");
+      requestAnimationFrame(() => { el.style.transform = `translateX(${dir * 140}%) rotate(${dir * 18}deg)`; el.style.opacity = 0; });
+    }
+    const flew = new Promise(r => setTimeout(r, el && !reduce ? 260 : 0));
     try {
-      const r = await api("swipe", { id: c.id, action, incoming: c.incoming });
+      const [r] = await Promise.all([api("swipe", { id: c.id, action, incoming: c.incoming }), flew]);
       if (r.match) showMatch(r.match);
       if (c.incoming && action) { ME.likes = Math.max(0, ME.likes - 1); setDot(ME.likes); }
     } catch (e) { toast(e.message); }
@@ -553,6 +767,16 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       ${m.username ? `<button class="btn primary" id="mWrite">💬 Написати</button>` : `<p class="muted">Контакт ми надіслали в чат з ботом.</p>`}
       <button class="btn" id="mNext">Дивитися далі</button>
       <div class="orn b" aria-hidden="true"></div>`;
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const cf = document.createElement("div"); cf.className = "confetti";
+      const cols = ["#0057B7", "#FFD500", "#F3C443", "#E2394B", "#5FB3FF"];
+      for (let n = 0; n < 60; n++) {
+        const i = document.createElement("i");
+        i.style.cssText = `left:${Math.random() * 100}%;background:${cols[n % cols.length]};--x:${(Math.random() - .5) * 120}px;--r:${Math.random() * 720}deg;--d:${2.2 + Math.random() * 1.8}s;--delay:${Math.random() * .6}s`;
+        cf.appendChild(i);
+      }
+      $("match").prepend(cf);
+    }
     $("match").classList.add("on"); tg?.BackButton?.show();
     if (m.username) $("mWrite").onclick = () => tg.openTelegramLink(`https://t.me/${m.username}`);
     $("mNext").onclick = closeMatch;
@@ -677,7 +901,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       { t: "Як тебе звати?", h: () => `<input id="wName" maxlength="30" value="${esc(R.name)}" placeholder="Ім'я" autocomplete="given-name">`, ok: () => (R.name = $("wName").value.trim()).length >= 2 || "Ім'я — від 2 символів" },
       { t: "Скільки тобі років?", h: () => `<input id="wAge" type="number" inputmode="numeric" min="18" max="70" value="${esc(R.age)}" placeholder="Наприклад, 27"><p class="muted">Бот лише для дорослих — від ${ME.minAge} років.</p>`, ok: () => { R.age = $("wAge").value; return (+R.age >= ME.minAge && +R.age <= 70) || `Вік від ${ME.minAge} до 70`; } },
       { t: "Хто ти і кого шукаєш?", h: () => `<div class="lbl">Я</div>${chips([["m", "👱‍♂️ Хлопець"], ["f", "👩 Дівчина"]], R.gender, "gender")}<div class="lbl">Шукаю</div>${chips([["f", "👩 Дівчину"], ["m", "👱‍♂️ Хлопця"]], R.search, "search")}`, ok: () => (R.gender && R.search) ? true : "Обери обидва варіанти" },
-      { t: "Де ти живеш?", h: () => `<div class="lbl">Країна</div>${chips(ME.countries.map(c => [c, c]), R.country, "country")}<div class="lbl">Місто</div><input id="wCity" maxlength="40" value="${esc(R.city)}" placeholder="Наприклад, Аліканте">`, ok: () => { R.city = $("wCity").value.trim(); return (R.country && R.city.length >= 2) ? true : "Обери країну й напиши місто"; } },
+      { t: "Де ти живеш?", h: () => `<div class="lbl">Країна</div><div class="chips pick">${ME.countries.map(c => `<button class="chip ${R.country === c ? "on" : ""}" data-k="country" data-v="${esc(c)}" style="display:inline-flex;align-items:center;gap:7px">${flag(c)}${esc(c)}</button>`).join("")}</div><div class="lbl">Місто</div><input id="wCity" maxlength="40" value="${esc(R.city)}" placeholder="Наприклад, Аліканте">`, ok: () => { R.city = $("wCity").value.trim(); return (R.country && R.city.length >= 2) ? true : "Обери країну й напиши місто"; } },
       { t: "Твої фото", h: () => `<div id="wMedia"></div>`, after: () => mediaEditor($("wMedia"), R.media), ok: () => R.media.length > 0 || "Додай хоча б одне фото" },
       { t: "Звідки ти і хто ти?", h: () => `<div class="lbl" style="margin-top:0">Звідки ти родом в Україні?</div><p class="muted" style="margin:0 2px 6px;font-size:14px">Земляків покажемо першими й позначимо 🤝</p>${chips(ME.hometowns.map(c => [c, c]), R.hometown, "hometown")}<input id="wHome" maxlength="40" value="${esc(ME.hometowns.includes(R.hometown) ? "" : R.hometown)}" placeholder="Інше місто"><div class="lbl">Кілька слів про себе</div><textarea id="wAbout" maxlength="700" placeholder="Чим займаєшся, кого шукаєш, куди підемо на першу каву">${esc(R.about)}</textarea>`,
         ok: () => { const h = $("wHome").value.trim(); if (h) R.hometown = h; R.about = $("wAbout").value.trim(); return R.about.length >= 3 || "Напиши кілька слів про себе"; } },
