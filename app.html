@@ -3,163 +3,241 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Знайомства</title>
+<title>FlirtUA</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;700;800&display=swap" rel="stylesheet">
 <style>
+/* FlirtUA — «Наші поруч». Нічний кобальт, пшеничне золото, червоний вишивки. Один яскравий елемент — вишиванка. */
 :root {
-  --bg: var(--tg-theme-bg-color, #111418);
-  --bg2: var(--tg-theme-secondary-bg-color, #1b2026);
-  --text: var(--tg-theme-text-color, #f2f4f6);
-  --hint: var(--tg-theme-hint-color, #8d97a3);
-  --accent: var(--tg-theme-button-color, #e0446a);
-  --accent-text: var(--tg-theme-button-text-color, #fff);
-  --line: color-mix(in srgb, var(--text) 12%, transparent);
-  --like: #ff4d6d; --skip: #8d97a3;
+  --night: #0E1E45;      /* фон */
+  --deep: #172B5C;       /* поверхні */
+  --deep2: #20376E;      /* піднята поверхня, поля */
+  --gold: #F3C443;       /* головні дії */
+  --gold-ink: #1A2340;   /* текст на золотому */
+  --red: #E2394B;        /* лайк, серця, вишивка */
+  --sky: #8DB4FF;        /* посилання, другорядне */
+  --linen: #F5EEE2;      /* текст */
+  --hint: #A7B3CF;       /* другорядний текст */
+  --line: rgba(245, 238, 226, .12);
+  --ok: #5FD39A;
+  --bg: var(--night); --bg2: var(--deep); --text: var(--linen); --accent: var(--gold); --accent-text: var(--gold-ink); --like: var(--red);
+  --display: "Unbounded", "Onest", system-ui, sans-serif;
+  --body: "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --safe-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
   --vh: var(--tg-viewport-stable-height, 100dvh);
+  --stitch: none;        /* орнамент — малюється скриптом */
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overscroll-behavior: none; }
-body { display: flex; flex-direction: column; height: var(--vh); padding-top: var(--safe-top); overflow: hidden; user-select: none; -webkit-user-select: none; }
+html, body { margin: 0; height: 100%; background: var(--night); color: var(--linen); font: 16px/1.45 var(--body); overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
+body { display: flex; flex-direction: column; height: var(--vh); padding-top: var(--safe-top); overflow: hidden; user-select: none; -webkit-user-select: none;
+  background: radial-gradient(120% 60% at 50% -10%, #1B3375 0%, var(--night) 60%) var(--night); }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
-input, textarea, select { font: inherit; color: var(--text); background: var(--bg2); border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; width: 100%; user-select: text; -webkit-user-select: text; }
-textarea { resize: none; min-height: 96px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+input, textarea, select { font: inherit; color: var(--linen); background: var(--deep2); border: 1px solid transparent; border-radius: 14px; padding: 12px 14px; width: 100%; user-select: text; -webkit-user-select: text; }
+input::placeholder, textarea::placeholder { color: #8391B3; }
+input:focus, textarea:focus, select:focus { border-color: var(--gold); outline: none; }
+textarea { resize: none; min-height: 100px; }
+h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em; }
+.muted { color: var(--hint); }
 .view { flex: 1; min-height: 0; display: none; flex-direction: column; }
 .view.on { display: flex; }
-.scroll { flex: 1; overflow-y: auto; padding: 14px 16px 20px; -webkit-overflow-scrolling: touch; }
+.scroll { flex: 1; overflow-y: auto; padding: 16px 16px 24px; -webkit-overflow-scrolling: touch; }
+
+/* вишиванка: смуга хрестикового орнаменту */
+.orn { height: 14px; background: var(--stitch) repeat-x center / auto 14px; flex: none; }
+.orn.big { height: 28px; background-size: auto 28px; }
+
+/* шапка стрічки */
+.top { display: flex; align-items: center; gap: 10px; padding: 6px 14px 8px; }
+.brand { font: 800 20px/1 var(--display); letter-spacing: -.02em; display: flex; align-items: center; gap: 7px; }
+.brand i { width: 22px; height: 22px; display: inline-block; background: var(--stitch-heart) center / contain no-repeat; }
+.brand b { color: var(--gold); font-weight: 800; }
+.here { margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: rgba(243, 196, 67, .12); color: var(--gold); font-weight: 600; font-size: 14px; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* стрічка */
-#feed { padding: 8px 8px 0; }
+#feed { padding: 0 10px; }
 .stage { flex: 1; min-height: 0; position: relative; }
-.card { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; background: #000; touch-action: none; will-change: transform; }
+.card { position: absolute; inset: 0; border-radius: 24px; overflow: hidden; background: var(--deep); touch-action: none; will-change: transform; box-shadow: 0 18px 40px rgba(3, 10, 30, .55); }
 .card img, .card video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
-.bars { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 4px; z-index: 2; }
-.bars i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.35); }
+.card .shade { position: absolute; inset: auto 0 0 0; height: 58%; background: linear-gradient(180deg, rgba(14, 30, 69, 0) 0%, rgba(14, 30, 69, .55) 40%, rgba(10, 21, 50, .95) 100%); pointer-events: none; }
+.card .who { position: absolute; left: 18px; right: 64px; bottom: 18px; pointer-events: none; }
+.who h3 { margin: 0; font: 700 30px/1.05 var(--display); letter-spacing: -.02em; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
+.who h3 span { font-weight: 500; opacity: .9; }
+.route { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 15px; font-weight: 600; color: #fff; }
+.route .arr { color: var(--gold); }
+.route .km { color: var(--hint); font-weight: 500; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tag { padding: 5px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; background: rgba(245, 238, 226, .14); color: #fff; backdrop-filter: blur(6px); }
+.tag.home { background: var(--gold); color: var(--gold-ink); }
+.tag.coffee { background: rgba(95, 211, 154, .2); color: #BFF3D9; }
+.tag.in { background: var(--red); }
+.bars { position: absolute; top: 10px; left: 12px; right: 12px; display: flex; gap: 4px; z-index: 2; }
+.bars i { flex: 1; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .35); }
 .bars i.on { background: #fff; }
-.info-btn { position: absolute; top: 18px; right: 12px; z-index: 3; width: 36px; height: 36px; border-radius: 50%; background: rgba(0,0,0,.38); color: #fff; font-size: 18px; display: grid; place-items: center; backdrop-filter: blur(6px); }
-.badge-in { position: absolute; top: 18px; left: 12px; z-index: 3; width: 36px; height: 36px; border-radius: 50%; background: rgba(255,77,109,.9); display: grid; place-items: center; font-size: 17px; }
-.actions { display: flex; justify-content: center; gap: 34px; padding: 12px 0 calc(10px + var(--safe-bottom)); }
-.round { width: 68px; height: 68px; border-radius: 50%; display: grid; place-items: center; font-size: 30px; background: var(--bg2); box-shadow: 0 4px 16px rgba(0,0,0,.25); }
-.round:active { transform: scale(.94); }
-.round.like { background: var(--like); }
+.info-btn { position: absolute; bottom: 22px; right: 16px; z-index: 3; width: 40px; height: 40px; border-radius: 50%; background: rgba(245, 238, 226, .16); color: #fff; display: grid; place-items: center; backdrop-filter: blur(6px); }
+.info-btn svg { width: 20px; height: 20px; }
+.badge-in { display: none; }
+.actions { display: flex; justify-content: center; align-items: center; gap: 22px; padding: 14px 0 calc(10px + var(--safe-bottom)); }
+.round { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--deep); border: 1.5px solid var(--line); transition: transform .12s; }
+.round svg { width: 28px; height: 28px; }
+.round:active { transform: scale(.92); }
+.round.like { width: 74px; height: 74px; background: var(--red); border-color: transparent; box-shadow: 0 10px 26px rgba(226, 57, 75, .45); }
+.round.like svg { width: 34px; height: 34px; }
+.round.super { width: 52px; height: 52px; color: var(--gold); border-color: rgba(243, 196, 67, .45); }
+.round.super svg { width: 24px; height: 24px; }
+.round.nope { color: var(--hint); }
 .stage > .empty { position: absolute; inset: 0; }
 .scroll > .empty { min-height: 100%; }
 .empty { flex: 1; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--hint); }
-.empty b { display: block; color: var(--text); font-size: 20px; margin-bottom: 6px; }
-.loader { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+.empty b { display: block; color: var(--linen); font: 700 19px/1.25 var(--display); margin-bottom: 8px; }
+.empty .btn { display: inline-block; width: auto; padding: 11px 18px; margin: 12px 4px 0; }
+.loader { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--gold); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* таби */
-.tabs { display: flex; border-top: 1px solid var(--line); background: var(--bg); padding-bottom: var(--safe-bottom); }
-.tabs button { flex: 1; padding: 8px 0 7px; display: grid; justify-items: center; gap: 1px; color: var(--hint); font-size: 11.5px; position: relative; }
-.tabs button span { font-size: 21px; line-height: 1.1; filter: grayscale(1); opacity: .7; }
-.tabs button.on { color: var(--text); }
-.tabs button.on span { filter: none; opacity: 1; }
-.tabs .dot { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: var(--like); color: #fff; font: 700 11px/17px system-ui; }
+.tabs { display: flex; background: rgba(14, 30, 69, .92); border-top: 1px solid var(--line); padding: 4px 0 var(--safe-bottom); backdrop-filter: blur(10px); }
+.tabs button { flex: 1; padding: 7px 0 6px; display: grid; justify-items: center; gap: 2px; color: var(--hint); font-size: 11.5px; font-weight: 600; position: relative; }
+.tabs button svg { width: 24px; height: 24px; }
+.tabs button.on { color: var(--gold); }
+.tabs .dot { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: #fff; font: 700 11px/18px var(--body); font-style: normal; }
 
 /* аркуші */
-.sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 20; display: none; }
+.sheet-bg { position: fixed; inset: 0; background: rgba(4, 10, 28, .6); z-index: 20; display: none; }
 .sheet-bg.on { display: block; }
-.sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 86%; overflow-y: auto; background: var(--bg); border-radius: 20px 20px 0 0; padding: 10px 18px calc(18px + var(--safe-bottom)); }
-.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 12px; }
-h2 { margin: 0 0 4px; font-size: 22px; }
-.muted { color: var(--hint); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 88%; overflow-y: auto; background: var(--deep); border-radius: 26px 26px 0 0; padding: 10px 18px calc(18px + var(--safe-bottom)); }
+.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 14px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
-.chip { background: var(--bg2); border-radius: 999px; padding: 5px 11px; font-size: 14px; }
-.about { white-space: pre-wrap; word-break: break-word; margin: 10px 0 14px; }
-.note { background: color-mix(in srgb, var(--like) 15%, var(--bg2)); border-radius: 12px; padding: 10px 12px; margin: 8px 0; }
-.btn { display: block; width: 100%; padding: 13px; border-radius: 12px; background: var(--bg2); font-weight: 600; text-align: center; margin-top: 8px; }
-.btn.primary { background: var(--accent); color: var(--accent-text); }
-.btn.danger { color: #ff6b6b; }
-.list-btn { display: block; width: 100%; text-align: left; padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.chip { background: var(--deep2); border-radius: 999px; padding: 6px 12px; font-size: 14px; }
+.about { white-space: pre-wrap; word-break: break-word; margin: 10px 0 14px; line-height: 1.55; }
+.note { background: rgba(226, 57, 75, .14); border-radius: 14px; padding: 11px 13px; margin: 8px 0; }
+.btn { display: block; width: 100%; padding: 14px; border-radius: 16px; background: var(--deep2); font-weight: 700; text-align: center; margin-top: 8px; }
+.btn:active { transform: scale(.99); }
+.btn.primary { background: var(--gold); color: var(--gold-ink); }
+.btn.danger { color: #FF8A95; background: transparent; border: 1px solid rgba(255, 138, 149, .3); }
+.btn:disabled { opacity: .55; }
+.list-btn { display: block; width: 100%; text-align: left; padding: 14px 4px; border-bottom: 1px solid var(--line); }
 
 /* лайки, симпатії */
+.head { margin: 4px 2px 14px; }
+.head p { margin: 2px 0 0; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cell { border-radius: 14px; overflow: hidden; background: var(--bg2); text-align: left; }
-.cell .ph { aspect-ratio: 3/4; background: #000; }
+.cell { border-radius: 18px; overflow: hidden; background: var(--deep); text-align: left; position: relative; }
+.cell .ph { aspect-ratio: 3/4; background: var(--deep2); }
 .cell .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cell .t { padding: 7px 10px 9px; font-size: 14px; }
-.big { font-size: 46px; font-weight: 800; line-height: 1; margin: 18px 0 6px; }
+.cell .t { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 9px; font-size: 14px; background: linear-gradient(180deg, transparent, rgba(10, 21, 50, .92)); }
+.cell .t b { font-family: var(--display); font-weight: 700; font-size: 14px; }
+.cell.locked .ph img { filter: blur(14px) saturate(.7); transform: scale(1.1); }
+.big { font: 800 64px/1 var(--display); margin: 20px 0 6px; color: var(--gold); }
 .row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.row img { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; background: var(--bg2); }
+.row img { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--deep2); border: 2px solid var(--gold); }
 .row .t { flex: 1; min-width: 0; }
-.row .t b { display: block; }
-.pill { padding: 8px 14px; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-weight: 600; font-size: 14px; white-space: nowrap; }
+.row .t b { display: block; font-family: var(--display); font-weight: 700; font-size: 15px; }
+.pill { padding: 9px 15px; border-radius: 999px; background: var(--gold); color: var(--gold-ink); font-weight: 700; font-size: 14px; white-space: nowrap; }
+
+/* профіль */
+.me-head { display: flex; align-items: center; gap: 14px; margin: 2px 2px 14px; }
+.me-head img { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gold); background: var(--deep2); }
+.me-head b { display: block; font: 700 20px/1.15 var(--display); }
+.field { margin: 12px 0; }
+.field label { display: block; font-size: 13px; color: var(--hint); margin: 0 0 6px 2px; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.toggle { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid var(--line); gap: 12px; }
+.toggle small { display: block; color: var(--hint); }
+.sw { width: 50px; height: 30px; border-radius: 15px; background: var(--deep2); position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--linen); transition: left .15s; }
+.sw.on { background: var(--gold); }
+.sw.on::after { left: 23px; background: var(--gold-ink); }
+.sec { margin: 26px 2px 8px; font: 700 15px/1.2 var(--display); color: var(--linen); }
+
+/* привітання */
+.hello { position: absolute; inset: 0; display: flex; flex-direction: column; overflow-y: auto; }
+.hello .art { position: relative; flex: none; padding: 26px 22px 0; }
+.hello h1 { font: 800 clamp(40px, 13vw, 56px)/.98 var(--display); letter-spacing: -.035em; margin: 22px 0 14px; }
+.hello .lead { font-size: 17px; color: var(--hint); margin: 0; max-width: 32ch; }
+.hello ul { list-style: none; margin: 26px 0 0; padding: 0 22px; display: grid; gap: 16px; }
+.hello li { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: start; }
+.hello li i { width: 44px; height: 44px; border-radius: 14px; background: var(--deep); display: grid; place-items: center; font-style: normal; font-size: 22px; }
+.hello li b { display: block; font-weight: 700; }
+.hello li span { color: var(--hint); font-size: 14.5px; }
+.hello .go { margin-top: auto; padding: 22px 22px calc(16px + var(--safe-bottom)); }
+.hello .go small { display: block; text-align: center; color: var(--hint); margin-top: 10px; font-size: 13px; }
+
+/* реєстрація */
+.wiz { position: absolute; inset: 0; overflow-y: auto; padding: 10px 12px 20px; display: flex; flex-direction: column; }
+.wiz h2 { margin: 20px 0 16px; font-size: 28px; line-height: 1.1; }
+.wbody { flex: 1; }
+.wbar { display: flex; gap: 4px; }
+.wbar i { flex: 1; height: 4px; border-radius: 2px; background: var(--deep2); }
+.wbar i.on { background: var(--gold); }
+.wback { color: var(--hint); margin-top: 12px; align-self: flex-start; font-weight: 600; }
+.lbl { margin: 18px 2px 6px; font-weight: 600; }
+.chips.pick .chip { padding: 11px 15px; font-size: 15px; border: 1.5px solid transparent; }
+.chips.pick .chip.on { background: rgba(243, 196, 67, .16); border-color: var(--gold); color: var(--gold); }
+.agree { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; font-size: 15px; }
+.agree input { width: 22px; height: 22px; flex: none; margin-top: 2px; accent-color: var(--gold); }
+.agree a { color: var(--sky); }
+/* фото */
+.mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mslot { position: relative; aspect-ratio: 3/4; border-radius: 16px; overflow: hidden; background: var(--deep); display: grid; place-items: center; text-align: center; }
+.mslot img, .mslot video { width: 100%; height: 100%; object-fit: cover; }
+.mslot.add { border: 1.5px dashed rgba(243, 196, 67, .45); cursor: pointer; color: var(--gold); }
+.mslot.add span { font-size: 30px; display: block; line-height: 1; }
+.mslot.add small { font-size: 11.5px; padding: 0 4px; color: var(--hint); }
+.mslot em { position: absolute; left: 6px; bottom: 6px; font-style: normal; font-size: 11px; font-weight: 700; background: var(--gold); color: var(--gold-ink); padding: 2px 8px; border-radius: 8px; }
+.mdel { position: absolute; top: 5px; right: 5px; width: 26px; height: 26px; border-radius: 50%; background: rgba(10, 21, 50, .7); color: #fff; font-size: 13px; }
+.mmain { position: absolute; left: 5px; right: 5px; bottom: 5px; font-size: 11px; background: rgba(10, 21, 50, .7); color: #fff; border-radius: 8px; padding: 4px; }
 
 /* преміум */
-.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin: 12px 0 4px; }
-.plan { position: relative; border-radius: 14px; background: var(--bg2); border: 1.5px solid var(--line); padding: 14px 6px 10px; text-align: center; }
+.prem { position: relative; border-radius: 22px; padding: 18px 16px 16px; background: linear-gradient(160deg, #22407F 0%, var(--deep) 70%); overflow: hidden; }
+.prem::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 10px; background: var(--stitch) repeat-x center / auto 10px; opacity: .9; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin: 14px 0 4px; }
+.plan { position: relative; border-radius: 18px; background: rgba(14, 30, 69, .6); border: 1.5px solid var(--line); padding: 16px 6px 12px; text-align: center; }
 .plan:active { transform: scale(.97); }
-.plan.best { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg2)); }
-.plan b { display: block; font-size: 21px; line-height: 1.1; }
-.plan .pt { display: block; font-size: 14px; margin-bottom: 2px; font-weight: 600; }
+.plan.best { border-color: var(--gold); background: rgba(243, 196, 67, .1); }
+.plan b { display: block; font: 800 24px/1.1 var(--display); color: var(--linen); }
+.plan.best b { color: var(--gold); }
+.plan .pt { display: block; font-size: 14px; margin-bottom: 4px; font-weight: 600; }
 .plan small { display: block; color: var(--hint); font-size: 11.5px; margin-top: 2px; }
-.plan em { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10.5px; font-weight: 700; background: var(--accent); color: var(--accent-text); padding: 1px 8px; border-radius: 8px; white-space: nowrap; }
+.plan em { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10.5px; font-weight: 700; background: var(--gold); color: var(--gold-ink); padding: 2px 9px; border-radius: 8px; white-space: nowrap; }
 .plan[disabled] { opacity: .5; }
-.prem-on { background: color-mix(in srgb, var(--accent) 14%, var(--bg2)); border-radius: 14px; padding: 12px 14px; margin: 8px 0; }
-.linkish { color: var(--hint); text-decoration: underline; font-size: 13px; display: inline-block; margin-top: 6px; }
+.prem-on { background: rgba(243, 196, 67, .12); border: 1px solid rgba(243, 196, 67, .35); border-radius: 16px; padding: 12px 14px; margin: 8px 0; }
+.linkish { color: var(--sky); font-size: 13px; display: inline-block; margin-top: 8px; }
 
 /* підтримка */
 .sup-log { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding: 4px 0 10px; }
-.bub { max-width: 82%; padding: 9px 12px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; user-select: text; -webkit-user-select: text; }
+.bub { max-width: 82%; padding: 10px 13px; border-radius: 18px; white-space: pre-wrap; word-break: break-word; font-size: 15px; user-select: text; -webkit-user-select: text; }
 .bub small { display: block; font-size: 11px; opacity: .65; margin-top: 3px; }
-.bub.me { align-self: flex-end; background: var(--accent); color: var(--accent-text); border-bottom-right-radius: 5px; }
-.bub.adm { align-self: flex-start; background: var(--bg2); border-bottom-left-radius: 5px; }
-.bub.adm b { display: block; font-size: 12px; color: var(--accent); margin-bottom: 2px; }
-.badge-n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: var(--like); color: #fff; font: 700 12px/20px system-ui; }
-
-/* профіль */
-.me-photo { width: 100%; aspect-ratio: 3/4; max-height: 52vh; object-fit: cover; border-radius: 16px; background: var(--bg2); display: block; }
-.field { margin: 12px 0; }
-.field label { display: block; font-size: 13px; color: var(--hint); margin: 0 0 5px 2px; }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.toggle { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--line); gap: 12px; }
-.toggle small { display: block; color: var(--hint); }
-.sw { width: 50px; height: 30px; border-radius: 15px; background: var(--line); position: relative; flex: none; }
-.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; }
-.sw.on { background: var(--accent); }
-.sw.on::after { left: 23px; }
-/* реєстрація */
-.wiz { position: absolute; inset: 0; overflow-y: auto; padding: 14px 10px 20px; display: flex; flex-direction: column; }
-.wiz h2 { margin: 18px 0 14px; font-size: 26px; }
-.wbody { flex: 1; }
-.wbar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
-.wbar i { display: block; height: 100%; background: var(--accent); }
-.wback { color: var(--hint); margin-top: 10px; align-self: flex-start; }
-.lbl { margin: 16px 2px 4px; font-weight: 600; }
-.chips.pick .chip { padding: 10px 14px; font-size: 15px; border: 1px solid transparent; }
-.chips.pick .chip.on { background: color-mix(in srgb, var(--accent) 22%, var(--bg2)); border-color: var(--accent); }
-.agree { display: flex; gap: 10px; align-items: flex-start; margin-top: 20px; font-size: 15px; }
-.agree input { width: 22px; height: 22px; flex: none; margin-top: 2px; }
-.agree a { color: var(--accent); }
-/* фото */
-.mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.mslot { position: relative; aspect-ratio: 3/4; border-radius: 12px; overflow: hidden; background: var(--bg2); display: grid; place-items: center; text-align: center; }
-.mslot img, .mslot video { width: 100%; height: 100%; object-fit: cover; }
-.mslot.add { border: 2px dashed var(--line); cursor: pointer; color: var(--hint); }
-.mslot.add span { font-size: 28px; display: block; }
-.mslot.add small { font-size: 11.5px; padding: 0 4px; }
-.mslot em { position: absolute; left: 6px; bottom: 6px; font-style: normal; font-size: 11px; background: var(--accent); color: var(--accent-text); padding: 2px 7px; border-radius: 8px; }
-.mdel { position: absolute; top: 5px; right: 5px; width: 26px; height: 26px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; }
-.mmain { position: absolute; left: 5px; right: 5px; bottom: 5px; font-size: 11px; background: rgba(0,0,0,.55); color: #fff; border-radius: 8px; padding: 3px; }
-.sec { margin: 22px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--hint); }
+.bub.me { align-self: flex-end; background: var(--gold); color: var(--gold-ink); border-bottom-right-radius: 6px; }
+.bub.adm { align-self: flex-start; background: var(--deep2); border-bottom-left-radius: 6px; }
+.bub.adm b { display: block; font-size: 12px; color: var(--gold); margin-bottom: 2px; }
+.badge-n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: var(--red); color: #fff; font: 700 12px/20px var(--body); }
 
 /* взаємність */
-.match { position: fixed; inset: 0; z-index: 30; background: var(--bg); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.match { position: fixed; inset: 0; z-index: 30; background: radial-gradient(90% 60% at 50% 35%, #2A4C99 0%, var(--night) 70%); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
 .match.on { display: flex; }
-.match img { width: 160px; height: 160px; border-radius: 50%; object-fit: cover; border: 4px solid var(--like); margin-bottom: 18px; }
-.match .btn { max-width: 320px; }
-.toast { position: fixed; left: 50%; bottom: calc(90px + var(--safe-bottom)); transform: translateX(-50%); background: rgba(0,0,0,.82); color: #fff; padding: 10px 16px; border-radius: 12px; z-index: 40; font-size: 14px; max-width: calc(100% - 32px); text-align: center; }
+.match .orn { position: absolute; left: 0; right: 0; }
+.match .orn.t { top: calc(var(--safe-top) + 14px); } .match .orn.b { bottom: calc(var(--safe-bottom) + 14px); }
+.pair { display: flex; justify-content: center; margin-bottom: 22px; }
+.pair img { width: 128px; height: 128px; border-radius: 50%; object-fit: cover; border: 4px solid var(--gold); background: var(--deep); }
+.pair img + img { margin-left: -26px; border-color: var(--red); }
+.match h2 { font-size: 34px; margin-bottom: 8px; }
+.match .btn { max-width: 340px; }
+@media (prefers-reduced-motion: no-preference) { .match.on .pair img { animation: meet .5s cubic-bezier(.2, .9, .3, 1.2) both; } .match.on .pair img + img { animation-delay: .08s; } }
+@keyframes meet { from { transform: scale(.6); opacity: 0; } }
+.toast { position: fixed; left: 50%; bottom: calc(96px + var(--safe-bottom)); transform: translateX(-50%); background: var(--linen); color: var(--night); font-weight: 600; padding: 11px 16px; border-radius: 14px; z-index: 40; font-size: 14px; max-width: calc(100% - 32px); text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
 </style>
 </head>
 <body>
   <section class="view on" id="feed">
+    <header class="top" id="top" hidden><div class="brand"><i aria-hidden="true"></i><span>Flirt<b>UA</b></span></div><div class="here" id="here"></div></header>
     <div class="stage" id="stage"><div class="empty"><div class="loader"></div></div></div>
     <div class="actions" id="actions" hidden>
-      <button class="round" id="bNope" aria-label="Далі">👎</button>
-      <button class="round like" id="bLike" aria-label="Лайк">❤️</button>
+      <button class="round nope" id="bNope" aria-label="Далі"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <button class="round like" id="bLike" aria-label="Подобається"><svg viewBox="0 0 24 24" fill="#fff"><path d="M12 21s-7.5-4.6-9.6-9.3C.9 8.2 3 4.5 6.7 4.5c2.1 0 3.6 1.1 5.3 3 1.7-1.9 3.2-3 5.3-3 3.7 0 5.8 3.7 4.3 7.2C19.5 16.4 12 21 12 21z"/></svg></button>
+      <button class="round super" id="bSuper" aria-label="Суперлайк з повідомленням"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 6.5h18v11H3z"/><path d="M3.5 7l8.5 6.5L20.5 7"/></svg></button>
     </div>
   </section>
   <section class="view" id="likes"><div class="scroll" id="likesBox"></div></section>
@@ -167,10 +245,10 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   <section class="view" id="profile"><div class="scroll" id="profileBox"></div></section>
 
   <nav class="tabs" id="tabs" hidden>
-    <button data-v="feed" class="on"><span>🔥</span>Анкети</button>
-    <button data-v="likes"><span>❤️</span>Лайки<i class="dot" id="likesDot" hidden></i></button>
-    <button data-v="matches"><span>💬</span>Симпатії</button>
-    <button data-v="profile"><span>👤</span>Профіль</button>
+    <button data-v="feed" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="3"/><path d="M9 16.5h6"/></svg>Анкети</button>
+    <button data-v="likes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 20s-7-4.3-8.9-8.6C1.7 8.2 3.6 5 7 5c1.9 0 3.3 1 5 2.8C13.7 6 15.1 5 17 5c3.4 0 5.3 3.2 3.9 6.4C19 15.7 12 20 12 20z"/></svg>Лайки<i class="dot" id="likesDot" hidden></i></button>
+    <button data-v="matches"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>Симпатії</button>
+    <button data-v="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8.5" r="4"/><path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5" stroke-linecap="round"/></svg>Профіль</button>
   </nav>
 
   <div class="sheet-bg" id="sheetBg"><div class="sheet" id="sheet"></div></div>
@@ -190,7 +268,35 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     if (!r.ok) throw new Error(d.error || "Помилка " + r.status);
     return d;
   }
-  try { tg.ready(); tg.expand(); tg.disableVerticalSwipes?.(); tg.setHeaderColor?.("bg_color"); tg.setBackgroundColor?.("bg_color"); } catch {}
+  try { tg.ready(); tg.expand(); tg.disableVerticalSwipes?.(); tg.setHeaderColor?.("#0E1E45"); tg.setBackgroundColor?.("#0E1E45"); tg.setBottomBarColor?.("#0E1E45"); } catch {}
+
+  // вишиванка: піксельний орнамент «хрестиком» — ромб і маленький ромбик, червоне й золоте
+  function stitchSVG(rows, cell = 2, gap = .35) {
+    const col = { r: "#E2394B", g: "#F3C443" };
+    let rects = "";
+    rows.forEach((row, y) => [...row].forEach((ch, x) => { if (col[ch]) rects += `<rect x="${x * cell + gap / 2}" y="${y * cell + gap / 2}" width="${cell - gap}" height="${cell - gap}" fill="${col[ch]}"/>`; }));
+    const w = rows[0].length * cell, h = rows.length * cell;
+    return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" shape-rendering="crispEdges">${rects}</svg>`)}")`;
+  }
+  (() => {
+    const W = 18, rows = [];
+    for (let y = 0; y < 9; y++) {
+      let r = "", d = Math.abs(y - 4);
+      for (let x = 0; x < W; x++) {
+        const dx = Math.abs(x - 4), sx = Math.abs(x - 13);
+        if (dx + d === 4) r += "r";                         // контур ромба
+        else if (dx + d === 2) r += "g";                    // внутрішній ромб
+        else if (dx === 0 && d === 0) r += "r";             // серцевина
+        else if (sx + d === 2 && d <= 2) r += "g";          // маленький ромбик між мотивами
+        else r += ".";
+      }
+      rows.push(r);
+    }
+    const heart = [".rr.rr.", "rrrrrrr", "rrgrrrr", ".rrrrr.", "..rrr..", "...r..."];
+    const st = document.documentElement.style;
+    st.setProperty("--stitch", stitchSVG(rows));
+    st.setProperty("--stitch-heart", stitchSVG(heart, 2, .3));
+  })();
 
   let ME = null, card = null, nextCard = null, idx = 0, busy = false;
   const plural = n => n % 10 === 1 && n % 100 !== 11 ? "людині" : "людям";
@@ -203,12 +309,34 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       return;
     }
     try { ME = await api("me"); } catch (e) { $("stage").innerHTML = `<div class="empty"><div><b>Не вдалося відкрити</b>${esc(e.message)}</div></div>`; return; }
-    if (!ME.registered) return wizard();
-    $("tabs").hidden = false;
+    if (!ME.registered) return hello();
+    $("tabs").hidden = false; showTop();
     setDot(ME.likes);
     const start = (location.hash || "").slice(1);
     if (start === "support") { go("profile"); openSupport(); }
     else if (["likes", "matches", "profile"].includes(start)) go(start); else loadNext();
+  }
+  function showTop() { $("top").hidden = false; $("here").textContent = "📍 " + (ME.me?.city || ME.me?.country || "Поруч"); }
+
+  // ---------- привітання для нових: з першої секунди видно, що це для наших за кордоном ----------
+  function hello() {
+    $("actions").hidden = true;
+    const where = (ME.countries || []).join(", ").replace(/, ([^,]*)$/, " та $1");
+    $("stage").innerHTML = `<div class="hello">
+      <div class="orn big" aria-hidden="true"></div>
+      <div class="art">
+        <div class="brand" style="font-size:22px"><i aria-hidden="true"></i><span>Flirt<b>UA</b></span></div>
+        <h1>Наші поруч.</h1>
+        <p class="lead">Знайомства українською для тих, хто живе за кордоном: ${esc(where)}.</p>
+      </div>
+      <ul>
+        <li><i>🤝</i><div><b>Земляки першими</b><span>Люди з твого міста в Україні — на початку стрічки й з позначкою.</span></div></li>
+        <li><i>📍</i><div><b>Поруч з тобою</b><span>Анкети відсортовані за відстанню: твоє місто, твій район.</span></div></li>
+        <li><i>☕️</i><div><b>Вільний сьогодні</b><span>Позначка на 24 години — для кави після роботи без довгих переписок.</span></div></li>
+      </ul>
+      <div class="go"><button class="btn primary" id="hGo">Створити анкету</button><small>Безкоштовно · лише 18+ · одна хвилина</small></div>
+    </div>`;
+    $("hGo").onclick = () => { hap("medium"); wizard(); };
   }
   function setDot(n) { $("likesDot").hidden = !n; $("likesDot").textContent = n > 99 ? "99+" : n; }
 
@@ -308,7 +436,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       try { card = await fetchNext(); } catch (e) { $("stage").innerHTML = `<div class="empty"><div><b>Помилка</b>${esc(e.message)}</div></div>`; return; }
     }
     if (!card) {
-      $("stage").innerHTML = `<div class="empty"><div><b>Нових анкет поки немає</b>Зазирни пізніше — нові люди реєструються щодня.<br><br><button class="btn" id="toFilters">⚙️ Змінити фільтри</button><button class="btn" id="retry">🔄 Ще раз</button></div></div>`;
+      $("stage").innerHTML = `<div class="empty"><div><div class="orn" style="width:120px;margin:0 auto 18px"></div><b>Ти переглянув(-ла) всіх поруч</b>Нові наші реєструються щодня. Розшир вік або країну пошуку — і стрічка оновиться.<br><button class="btn primary" id="toFilters">Змінити фільтри</button><button class="btn" id="retry">Оновити</button></div></div>`;
       $("toFilters").onclick = () => go("profile"); $("retry").onclick = loadNext;
       return;
     }
@@ -317,12 +445,22 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     if (!card.incoming) fetchNext().then(c => { nextCard = c; if (c?.media[0]) { const i = new Image(); i.src = c.media[0].url; } }).catch(() => {});
   }
   function mediaEl(m) { return m.t === "video" ? `<video src="${m.url}" autoplay muted loop playsinline></video>` : `<img src="${m.url}" alt="">`; }
+  // маршрут людини: звідки в Україні → де живе зараз
+  function routeHtml(c) {
+    const now = c.city || c.country, km = c.dist != null && c.dist < 999 ? `<span class="km">${c.dist < 1 ? "поруч" : c.dist + " км"}</span>` : "";
+    return `<div class="route">${c.hometown ? `${esc(c.hometown)} <span class="arr">→</span> ` : ""}${esc(now)}${km}</div>`;
+  }
+  function tagsHtml(c) {
+    const t = [c.incoming ? `<span class="tag in">❤️ Ти сподобався(-лась)</span>` : "", c.sameHome ? `<span class="tag home">🤝 Земляки</span>` : "", c.free ? `<span class="tag coffee">☕️ Можна на каву сьогодні</span>` : ""].filter(Boolean);
+    return t.length ? `<div class="tags">${t.join("")}</div>` : "";
+  }
   function renderCard() {
     const c = card, n = c.media.length;
     $("stage").innerHTML = `<div class="card" id="card">${n > 1 ? `<div class="bars">${c.media.map((_, i) => `<i class="${i <= idx ? "on" : ""}"></i>`).join("")}</div>` : ""}
-      ${c.incoming ? `<div class="badge-in" title="Ти сподобався(-лась)">❤️</div>` : ""}
-      <button class="info-btn" id="info" aria-label="Про людину">ⓘ</button>
-      ${mediaEl(c.media[idx] || c.media[0])}</div>`;
+      ${mediaEl(c.media[idx] || c.media[0])}
+      <div class="shade"></div>
+      <div class="who"><h3>${esc(c.name)}<span>, ${esc(c.age)}</span></h3>${routeHtml(c)}${tagsHtml(c)}</div>
+      <button class="info-btn" id="info" aria-label="Більше про людину"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg></button></div>`;
     $("actions").hidden = false;
     $("info").onclick = e => { e.stopPropagation(); openInfo(); };
     drag($("card"));
@@ -350,6 +488,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   }
   $("bLike").onclick = () => act("like");
   $("bNope").onclick = () => act("skip");
+  $("bSuper").onclick = () => card && openSuper(card);
   async function act(action) {
     if (busy || !card) return;
     busy = true; hap(action === "like" ? "medium" : "light");
@@ -370,7 +509,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   tg?.BackButton?.onClick(() => { if ($("match").classList.contains("on")) closeMatch(); else closeSheet(); });
   function infoHtml(c) {
     const chips = [c.dist ? `📍 ${c.dist} км` : "", c.hometown ? `🏠 ${esc(c.hometown)}${c.sameHome ? " · земляки 🤝" : ""}` : "", c.free ? "☕️ вільний(-а) сьогодні" : "", c.city ? `🌍 ${esc(c.country)}` : ""].filter(Boolean);
-    return `<h2>${esc(c.name)}, ${esc(c.age)}</h2><div class="muted">${esc(c.city || c.country)}</div>
+    return `<h2>${esc(c.name)}, ${esc(c.age)}</h2>${routeHtml(c).replace('class="route"', 'class="route" style="color:var(--linen)"')}
       ${c.incoming ? `<div class="note">❤️ Ти сподобався(-лась) цій людині</div>` : ""}
       ${c.note ? `<div class="note">💌 «${esc(c.note)}»</div>` : ""}
       ${chips.length ? `<div class="chips">${chips.map(x => `<span class="chip">${x}</span>`).join("")}</div>` : ""}
@@ -407,9 +546,13 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   // ---------- взаємність ----------
   function showMatch(m) {
     ok("success");
-    $("match").innerHTML = `${m.photo ? `<img src="${m.photo}" alt="">` : ""}<h2>Взаємна симпатія!</h2><p class="muted">Ти і ${esc(m.name)} сподобались одне одному.</p>
+    const mine = ME?.me?.media?.[0]?.url || (ME?.me?.mediaRaw || [])[0]?.url || "";
+    $("match").innerHTML = `<div class="orn t" aria-hidden="true"></div>
+      <div class="pair">${mine ? `<img src="${mine}" alt="">` : ""}${m.photo ? `<img src="${m.photo}" alt="">` : ""}</div>
+      <h2>Це взаємно!</h2><p class="muted" style="margin:0 0 18px">Ти і ${esc(m.name)} сподобались одне одному. Напиши першим(-ою) — українською 🙂</p>
       ${m.username ? `<button class="btn primary" id="mWrite">💬 Написати</button>` : `<p class="muted">Контакт ми надіслали в чат з ботом.</p>`}
-      <button class="btn" id="mNext">Дивитися далі</button>`;
+      <button class="btn" id="mNext">Дивитися далі</button>
+      <div class="orn b" aria-hidden="true"></div>`;
     $("match").classList.add("on"); tg?.BackButton?.show();
     if (m.username) $("mWrite").onclick = () => tg.openTelegramLink(`https://t.me/${m.username}`);
     $("mNext").onclick = closeMatch;
@@ -422,25 +565,25 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     let r; try { r = await api("likes"); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
     ME.likes = r.count; setDot(r.count);
     if (!r.count) {
-      box.innerHTML = `<div style="text-align:center;padding-top:24px"><div style="font-size:44px">💌</div><h2>Поки нових лайків немає</h2><p class="muted">Гарне фото з усмішкою та кілька слів про себе дають у рази більше лайків 😉</p>
-        ${!isPrem() && plansHtml() ? `<div class="sec" style="margin-top:26px">💎 Преміум</div><p class="muted" style="margin:0">З Преміумом ти одразу бачиш кожного, хто тебе лайкне, — з фото й анкетою.</p>${plansHtml()}` : ""}
-        ${isPrem() ? `<div class="prem-on">💎 <b>Преміум активний</b> — ${untilText(ME.me.premiumUntil)}</div>` : ""}</div>`;
+      box.innerHTML = `<div class="head"><h2>Лайки</h2><p class="muted">Поки нових немає. Фото з усмішкою і пара слів про те, звідки ти, дають у рази більше лайків.</p></div>
+        ${isPrem() ? `<div class="prem-on">💎 <b>Преміум активний</b> — ${untilText(ME.me.premiumUntil)}</div>`
+          : plansHtml() ? `<div class="prem"><h2 style="font-size:19px">Побач, хто тебе лайкне</h2><p class="muted" style="margin:0">З Преміумом кожен, кому ти сподобався(-лась), одразу з'являється тут — з фото й анкетою.</p>${plansHtml()}</div>` : ""}`;
       bindPlans(box, renderLikes);
       return;
     }
     if (!r.premium) {
       const share = `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("Знайомства для українців за кордоном ❤️")}`;
-      box.innerHTML = `<div style="text-align:center"><div class="big">${r.count}</div><div>${r.count === 1 ? "людині" : "людям"} ти сподобався(-лась)</div>
-        <p class="muted">Вони покажуться першими в «Анкетах».</p><button class="btn primary" id="toFeed">🔥 Дивитися анкети</button>
-        ${plansHtml() ? `<div class="sec" style="margin-top:26px">💎 Побач усіх зараз</div><p class="muted" style="margin:0">Преміум відкриває фото й анкети всіх, хто тебе лайкнув.</p>${plansHtml()}` : ""}
-        <p class="muted" style="margin-top:22px">Або запроси друга — ви обоє отримаєте Преміум на ${ME.premiumMinutes} хв безкоштовно.</p>
-        <button class="btn" id="invite">🎁 Запросити друга</button></div>`;
+      box.innerHTML = `<div style="text-align:center;margin-bottom:18px"><div class="big">${r.count}</div><div style="font-weight:600">${r.count === 1 ? "людині" : "людям"} ти сподобався(-лась)</div>
+        <p class="muted" style="margin:6px 0 0">Вони покажуться першими в стрічці.</p><button class="btn" id="toFeed">До анкет</button></div>
+        ${plansHtml() ? `<div class="prem"><h2 style="font-size:19px">Побач їх усіх зараз</h2><p class="muted" style="margin:0">Преміум відкриває фото й анкети всіх, хто тебе лайкнув, — відповідай взаємністю одним дотиком.</p>${plansHtml()}</div>` : ""}
+        <p class="muted" style="margin:22px 2px 0">Або запроси друга — ви обоє отримаєте Преміум на ${ME.premiumMinutes} хв безкоштовно.</p>
+        <button class="btn" id="invite">🎁 Запросити друга</button>`;
       bindPlans(box, renderLikes);
       $("toFeed").onclick = () => go("feed");
       $("invite").onclick = () => tg.openTelegramLink(share);
       return;
     }
-    box.innerHTML = `<h2>Тебе лайкнули: ${r.count}</h2><p class="muted">Натисни на фото, щоб відповісти.${isPrem() ? ` · 💎 ${untilText(ME.me.premiumUntil)}` : ""}</p><div class="grid">${r.items.map((c, i) => `<button class="cell" data-i="${i}"><div class="ph"><img src="${c.media[0]?.url || ""}" alt="" loading="lazy"></div><div class="t"><b>${esc(c.name)}, ${esc(c.age)}</b><br><span class="muted">${esc(c.city || c.country)}</span></div></button>`).join("")}</div>`;
+    box.innerHTML = `<div class="head"><h2>Тебе лайкнули: ${r.count}</h2><p class="muted">Торкнись фото, щоб відповісти. Преміум ${untilText(ME.me.premiumUntil)}.</p></div><div class="grid">${r.items.map((c, i) => `<button class="cell" data-i="${i}"><div class="ph"><img src="${c.media[0]?.url || ""}" alt="" loading="lazy"></div><div class="t"><b>${esc(c.name)}, ${esc(c.age)}</b><br><span style="opacity:.85">${c.sameHome ? "🤝 " : ""}${esc(c.hometown ? c.hometown + " → " + (c.city || c.country) : (c.city || c.country))}</span></div></button>`).join("")}</div>`;
     box.querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
       const c = r.items[+b.dataset.i];
       sheet(`<img src="${c.media[0]?.url || ""}" alt="" style="width:100%;border-radius:14px;max-height:50vh;object-fit:cover">` + infoHtml(c) +
@@ -454,8 +597,8 @@ h2 { margin: 0 0 4px; font-size: 22px; }
   async function renderMatches() {
     const box = $("matchesBox"); box.innerHTML = `<div class="empty"><div class="loader"></div></div>`;
     let list; try { list = await api("matches"); } catch (e) { box.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
-    if (!list.length) { box.innerHTML = `<div class="empty"><div><b>Поки немає симпатій</b>Коли ви обоє поставите ❤️, людина з'явиться тут.</div></div>`; return; }
-    box.innerHTML = `<h2>Симпатії</h2>` + list.map((m, i) => `<div class="row"><img src="${m.photo}" alt=""><div class="t"><b>${esc(m.name)}, ${esc(m.age)}</b><span class="muted">${esc(m.city)}</span></div>${m.username ? `<button class="pill" data-u="${esc(m.username)}">Написати</button>` : `<span class="muted" style="font-size:13px">контакт у чаті</span>`}</div>`).join("");
+    if (!list.length) { box.innerHTML = `<div class="empty"><div><div class="orn" style="width:120px;margin:0 auto 18px"></div><b>Тут будуть ваші «взаємно»</b>Коли ви обоє поставите ❤️, людина з'явиться тут — і можна писати.</div></div>`; return; }
+    box.innerHTML = `<div class="head"><h2>Симпатії</h2><p class="muted">Взаємні лайки. Пиши першим(-ою) — так знайомляться найшвидше.</p></div>` + list.map((m, i) => `<div class="row"><img src="${m.photo}" alt=""><div class="t"><b>${esc(m.name)}, ${esc(m.age)}</b><span class="muted">${esc(m.city)}</span></div>${m.username ? `<button class="pill" data-u="${esc(m.username)}">Написати</button>` : `<span class="muted" style="font-size:13px">контакт у чаті</span>`}</div>`).join("");
     box.querySelectorAll("[data-u]").forEach(b => b.onclick = () => tg.openTelegramLink(`https://t.me/${b.dataset.u}`));
   }
 
@@ -536,7 +679,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
       { t: "Хто ти і кого шукаєш?", h: () => `<div class="lbl">Я</div>${chips([["m", "👱‍♂️ Хлопець"], ["f", "👩 Дівчина"]], R.gender, "gender")}<div class="lbl">Шукаю</div>${chips([["f", "👩 Дівчину"], ["m", "👱‍♂️ Хлопця"]], R.search, "search")}`, ok: () => (R.gender && R.search) ? true : "Обери обидва варіанти" },
       { t: "Де ти живеш?", h: () => `<div class="lbl">Країна</div>${chips(ME.countries.map(c => [c, c]), R.country, "country")}<div class="lbl">Місто</div><input id="wCity" maxlength="40" value="${esc(R.city)}" placeholder="Наприклад, Аліканте">`, ok: () => { R.city = $("wCity").value.trim(); return (R.country && R.city.length >= 2) ? true : "Обери країну й напиши місто"; } },
       { t: "Твої фото", h: () => `<div id="wMedia"></div>`, after: () => mediaEditor($("wMedia"), R.media), ok: () => R.media.length > 0 || "Додай хоча б одне фото" },
-      { t: "Розкажи про себе", h: () => `<textarea id="wAbout" maxlength="700" placeholder="Хто ти, кого хочеш знайти, чим пропонуєш зайнятися">${esc(R.about)}</textarea><div class="lbl">Звідки ти родом в Україні? <span class="muted">(необов'язково)</span></div>${chips(ME.hometowns.map(c => [c, c]), R.hometown, "hometown")}<input id="wHome" maxlength="40" value="${esc(ME.hometowns.includes(R.hometown) ? "" : R.hometown)}" placeholder="Інше місто">`,
+      { t: "Звідки ти і хто ти?", h: () => `<div class="lbl" style="margin-top:0">Звідки ти родом в Україні?</div><p class="muted" style="margin:0 2px 6px;font-size:14px">Земляків покажемо першими й позначимо 🤝</p>${chips(ME.hometowns.map(c => [c, c]), R.hometown, "hometown")}<input id="wHome" maxlength="40" value="${esc(ME.hometowns.includes(R.hometown) ? "" : R.hometown)}" placeholder="Інше місто"><div class="lbl">Кілька слів про себе</div><textarea id="wAbout" maxlength="700" placeholder="Чим займаєшся, кого шукаєш, куди підемо на першу каву">${esc(R.about)}</textarea>`,
         ok: () => { const h = $("wHome").value.trim(); if (h) R.hometown = h; R.about = $("wAbout").value.trim(); return R.about.length >= 3 || "Напиши кілька слів про себе"; } },
       { t: "Майже готово!", h: () => `<button class="btn" id="wLoc">${R.lat != null ? "✅ Локацію додано" : "📍 Показувати людей поруч"}</button><p class="muted">Інші бачать лише приблизну відстань у км, не адресу. Можна пропустити.</p>
           <label class="agree"><input type="checkbox" id="wAgree" ${R.agree ? "checked" : ""}> <span>Мені є 18 років, я погоджуюсь з <a href="#" id="wRules">правилами</a> і буду використовувати лише свої фото.</span></label>`,
@@ -545,7 +688,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     ];
     const draw = () => {
       const s = steps[step];
-      $("stage").innerHTML = `<div class="wiz"><div class="wbar"><i style="width:${(step + 1) / steps.length * 100}%"></i></div>
+      $("stage").innerHTML = `<div class="wiz"><div class="orn" aria-hidden="true" style="margin:0 -12px 12px"></div><div class="wbar">${steps.map((_, k) => `<i class="${k <= step ? "on" : ""}"></i>`).join("")}</div>
         ${step ? `<button class="wback" id="wBack">‹ Назад</button>` : ""}
         <h2>${s.t}</h2><div class="wbody">${s.h()}</div>
         <button class="btn primary" id="wNext">${step === steps.length - 1 ? "Створити анкету ❤️" : "Далі"}</button></div>`;
@@ -558,7 +701,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
         $("wNext").disabled = true;
         try {
           await api("register", { ...R, media: R.media.map(m => ({ t: m.t, id: m.id, tok: m.tok, thumb: m.thumb })) });
-          ok("success"); ME = await api("me"); $("tabs").hidden = false; setDot(ME.likes);
+          ok("success"); ME = await api("me"); $("tabs").hidden = false; showTop(); setDot(ME.likes);
           toast("🎉 Анкету створено!"); loadNext();
         } catch (e) { toast(e.message); $("wNext").disabled = false; }
       };
@@ -575,13 +718,17 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     const prem = m.premiumUntil * 1000 > Date.now();
     const opt = (v, cur, label) => `<option value="${esc(v)}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${esc(label ?? v)}</option>`;
     const share = `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("Знайомства для українців за кордоном ❤️ Спробуй — тут багато наших поруч!")}`;
+    const ph = (m.mediaRaw || [])[0]?.url || m.media?.[0]?.url || "";
     box.innerHTML = `
+      <div class="me-head">${ph ? `<img src="${ph}" alt="">` : ""}<div><b>${esc(m.name)}, ${esc(m.age)}</b><span class="muted">${esc(m.hometown ? m.hometown + " → " : "")}${esc(m.city || m.country)}</span></div></div>
+      <div class="prem">
+        <h2 style="font-size:19px">${prem ? "💎 Преміум активний" : "💎 Преміум"}</h2>
+        <p class="muted" style="margin:0">${prem ? `${untilText(m.premiumUntil)}. Бачиш усіх, хто тебе лайкнув. Можна продовжити — дні додадуться.` : "Побач усіх, кому ти сподобався(-лась), і відповідай взаємністю. Оплата зірками Telegram — не виходячи з застосунку."}</p>
+        <div id="pPlans">${plansHtml() || `<p class="muted" style="margin:10px 0 0">Оплата тимчасово недоступна — запроси друга, щоб отримати Преміум.</p>`}</div>
+      </div>
+      <div class="sec">Фото</div>
       <div id="pMedia"></div>
-      <div class="sec">💎 Преміум</div>
-      ${prem ? `<div class="prem-on">💎 <b>Преміум активний</b> — ${untilText(m.premiumUntil)}<br><span class="muted">Бачиш усіх, хто тебе лайкнув. Можна продовжити — дні додадуться.</span></div>`
-             : `<p style="margin:4px 2px">Побач усіх, кому ти сподобався(-лась), і відповідай взаємністю. Оплата зірками Telegram ⭐ — не виходячи з застосунку.</p>`}
-      <div id="pPlans">${plansHtml() || `<p class="muted" style="margin:4px 2px">Оплата тимчасово недоступна — запроси друга, щоб отримати Преміум.</p>`}</div>
-      <div class="sec">Анкета</div>
+      <div class="sec">Про тебе</div>
       <div class="two"><div class="field"><label>Ім'я</label><input id="pName" maxlength="30" value="${esc(m.name)}"></div><div class="field"><label>Вік</label><input id="pAge" type="number" inputmode="numeric" min="18" max="70" value="${esc(m.age)}"></div></div>
       <div class="two"><div class="field"><label>Країна</label><select id="pCountry">${ME.countries.map(c => opt(c, m.country)).join("")}</select></div><div class="field"><label>Місто</label><input id="pCity" maxlength="40" value="${esc(m.city)}" placeholder="Аліканте"></div></div>
       <div class="two"><div class="field"><label>Я</label><select id="pGender">${opt("m", m.gender, "Хлопець")}${opt("f", m.gender, "Дівчина")}</select></div><div class="field"><label>Шукаю</label><select id="pSearch">${opt("f", m.search, "Дівчину")}${opt("m", m.search, "Хлопця")}</select></div></div>
