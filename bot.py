@@ -557,6 +557,10 @@ MEN = "Я Чоловік 👱‍♂️"
 WOMEN = "Я Жінка 👩"
 WANT_F = "Шукаю Дівчину 👩"
 WANT_M = "Шукаю Хлопця 👱‍♂️"
+GOALS = ("date", "friends")  # пошук пари / дружба; у старих анкетах мети немає — це «пошук пари»
+
+def goal_of(p):
+    return "friends" if (p or {}).get("goal") == "friends" else "date"
 
 B_FEED = "👥 Дивитися анкети"
 B_LIKES = "❤️ Мої лайки"
@@ -882,6 +886,7 @@ async def find_next(user_id):
 
     filters = me.get("search_filters") or {}
     target_gender = WOMEN if "Дівчину" in me.get("search", "") else MEN
+    my_goal, my_gender_wants = goal_of(me), (WANT_M if me.get("gender") == MEN else WANT_F)
     query = db.collection("users").where("gender", "==", target_gender).where("country", "==", filters.get("country") or me.get("country"))
     docs = await asyncio.to_thread(lambda: query.limit(300).get())
     min_age, max_age = filters.get("min_age"), filters.get("max_age")
@@ -892,6 +897,9 @@ async def find_next(user_id):
         if d.id == str(user_id) or d.id in seen_ids or not visible(p):
             continue
         if (min_age and p["age"] < min_age) or (max_age and p["age"] > max_age):
+            continue
+        # лише люди з тією ж метою; у дружбі — ще й ті, хто шукає друзів моєї статі
+        if goal_of(p) != my_goal or (my_goal == "friends" and p.get("search") != my_gender_wants):
             continue
         p["tg_id"] = d.id
         cand.append(p)
