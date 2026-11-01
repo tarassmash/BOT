@@ -94,6 +94,32 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .login input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; background: var(--card); margin: 10px 0; }
 .preview { background: var(--soft); border-radius: 12px; padding: 12px; white-space: pre-wrap; word-break: break-word; font-size: 14px; }
 .empty { color: var(--muted); padding: 20px 0; text-align: center; }
+/* дизайн */
+.ds { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .ds { grid-template-columns: 1fr; } .ds-phone { position: static !important; } }
+.ds-phone { position: sticky; top: 12px; }
+.ds-phone .frame { width: 360px; height: 720px; border-radius: 36px; overflow: hidden; border: 10px solid #0b0f17; background: #0b0f17; box-shadow: 0 20px 50px rgba(0,0,0,.25); margin: 0 auto; }
+.ds-phone iframe { width: 390px; height: 780px; border: 0; transform: scale(.872); transform-origin: 0 0; }
+.ds-screens { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin-bottom: 10px; }
+.ds-screens button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 5px 10px; font-size: 13px; cursor: pointer; color: var(--ink); }
+.ds-screens button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.ds-colors { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.ds-color { display: flex; align-items: center; gap: 8px; }
+.ds-color input[type=color] { width: 42px; height: 34px; padding: 2px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); flex: none; }
+.ds-color input[type=text] { width: 92px; font-family: var(--mono); font-size: 13px; }
+.ds-color label { font-size: 13px; color: var(--muted); display: block; }
+.ds-slots { display: grid; gap: 12px; }
+.ds-slot { display: grid; grid-template-columns: 150px 1fr; gap: 12px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+@media (max-width: 600px) { .ds-slot { grid-template-columns: 1fr; } }
+.ds-slot .cur { width: 150px; aspect-ratio: 1; border-radius: 10px; background: var(--soft); display: grid; place-items: center; overflow: hidden; color: var(--muted); font-size: 12px; text-align: center; }
+.ds-slot .cur img { width: 100%; height: 100%; object-fit: cover; }
+.ds-vars { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ds-vars figure { margin: 0; width: 120px; }
+.ds-vars img { width: 120px; height: 100px; object-fit: cover; border-radius: 8px; display: block; }
+.ds-vars button { width: 100%; margin-top: 4px; }
+.ds-bar { position: sticky; bottom: 0; background: var(--paper); padding: 10px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; z-index: 2; }
+.ds-slide { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.ds-slide h4 { margin: 0 0 8px; font-size: 14px; }
 .sup-wrap { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 12px; align-items: start; }
 @media (max-width: 820px) { .sup-wrap { grid-template-columns: 1fr; } }
 .sup-item { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 9px 8px; border-radius: 10px; cursor: pointer; color: inherit; font: inherit; }
@@ -124,6 +150,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <button role="tab" data-tab="overview" aria-selected="true">Обзор</button>
       <button role="tab" data-tab="users" aria-selected="false">Анкеты</button>
       <button role="tab" data-tab="reports" aria-selected="false">Жалобы <span class="badge" id="repN" hidden></span></button>
+      <button role="tab" data-tab="design" aria-selected="false">🎨 Дизайн</button>
       <button role="tab" data-tab="support" aria-selected="false">Поддержка <span class="badge" id="supN" hidden></span></button>
       <button role="tab" data-tab="pay" aria-selected="false">Оплаты</button>
       <button role="tab" data-tab="cast" aria-selected="false">Рассылка</button>
@@ -158,6 +185,41 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     <section data-panel="reports" hidden>
       <div class="filters"><select id="repStatus"><option value="new">Новые</option><option value="all">Все</option></select><span class="muted" style="align-self:center;font-size:14px">Жалобы кнопкой 🚨 в боте, сгруппированы по анкете. Анкета скрывается из ленты автоматически, когда жалуются несколько разных людей (порог в «Настройках»).</span></div>
       <div id="reports"></div>
+    </section>
+
+    <section data-panel="design" hidden>
+      <div class="warnbox card" id="dsNoKey" hidden style="border-color:var(--warn);margin-bottom:12px"><b>Нет ключа fal.ai.</b> Цвета, шрифты и тексты менять можно, а для генерации картинок добавьте <span class="mono">FAL_KEY</span> в Railway → сервис бота → Variables.</div>
+      <div class="ds">
+        <div>
+          <div class="card">
+            <h3>✨ Придумать дизайн целиком</h3>
+            <div class="field"><label for="dsWish">Опишите стиль словами</label><textarea id="dsWish" placeholder="Например: светлый, тёплый, как летний вечер в Барселоне; больше жёлтого; романтично, но не слащаво"></textarea><span class="hint">Нейросеть подберёт цвета, шрифты, тексты онбординга и описания картинок. Ничего не сохранится, пока вы не нажмёте «Сохранить дизайн».</span></div>
+            <div class="actions"><button class="btn acc" id="dsAi" type="button">✨ Придумать</button><button class="btn" id="dsGenAll" type="button">🖼 Сгенерировать все картинки</button><span class="muted" id="dsAiMsg" style="align-self:center;font-size:14px"></span></div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <h3>Цвета</h3>
+            <div class="ds-colors" id="dsColors"></div>
+            <h3 style="margin-top:16px">Шрифты</h3>
+            <div class="row"><div class="field"><label for="dsFontD">Заголовки и имена</label><select id="dsFontD"></select></div><div class="field"><label for="dsFontB">Текст</label><select id="dsFontB"></select></div></div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <h3>Онбординг — тексты</h3>
+            <p class="muted" style="margin:0 0 10px;font-size:13px">Пустое поле — стандартный текст (он показан серым). Пункты: по одному на строку.</p>
+            <div id="dsSlides"></div>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <h3>Картинки экранов</h3>
+            <p class="muted" style="margin:0 0 10px;font-size:13px">Опишите картинку (лучше по-английски) и нажмите «Сгенерировать». Выберите вариант — он сразу появится в приложении. Одна картинка ≈ $0.05 в fal.ai.</p>
+            <div class="ds-slots" id="dsSlots"></div>
+          </div>
+          <div class="ds-bar"><button class="btn solid" id="dsSave" type="button">Сохранить дизайн</button><button class="btn" id="dsUndo" type="button">Отменить изменения</button><button class="btn bad" id="dsReset" type="button">Вернуть стандартный дизайн</button><span class="muted" id="dsMsg" style="font-size:14px"></span></div>
+        </div>
+        <div class="ds-phone">
+          <div class="ds-screens" id="dsScreens"></div>
+          <div class="frame"><iframe id="dsFrame" title="Предпросмотр приложения"></iframe></div>
+          <p class="muted" style="font-size:12.5px;text-align:center;margin:8px 0 0">Предпросмотр с демо-анкетами. Изменения видны сразу, в приложении — после «Сохранить».</p>
+        </div>
+      </div>
     </section>
 
     <section data-panel="support" hidden>
@@ -301,6 +363,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       if (tab === "cast") { castCount(); await castStatus(); }
       if (tab === "pay") await loadPay();
       if (tab === "support") await loadSupport();
+      if (tab === "design") await loadDesign();
       if (tab === "settings") await loadSettings();
     } catch (e) { if (e.message !== "Нужно войти") toast(e.message, true); }
   }
@@ -490,6 +553,113 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       ${c.running ? `<div class="actions"><button class="btn bad sm" id="cStop">Остановить</button></div>` : ""}`;
     if (c.running) { $("cStop").onclick = async () => { await api("/admin/api/broadcast", { stop: true }); castStatus(); }; castTimer = setTimeout(() => tab === "cast" && castStatus(), 2000); }
   }
+
+  // ---------- дизайн ----------
+  let DS = null, draft = null, saved = null, dsScreen = "ob0";
+  const SCREENS = [["ob0", "Онбординг 1"], ["ob1", "2"], ["ob2", "3"], ["ob3", "4"], ["wizard", "Регистрация"], ["feed", "Лента"], ["match", "Взаимно"], ["empty", "Пустая лента"], ["likes", "Лайки"], ["matches", "Симпатии"], ["profile", "Профиль"]];
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const frameReady = () => $("dsFrame").contentWindow;
+  function pushPreview() { try { frameReady()?.postMessage({ type: "design", design: { ...draft, slides: mergedSlides() } }, location.origin); } catch {} }
+  function mergedSlides() { return DS.defaultSlides.map((d, i) => { const c = draft.slides[i] || {}; return { title: c.title || d.title, lead: c.lead || d.lead, ...(d.items ? { items: c.items?.length ? c.items : d.items } : {}) }; }); }
+  window.addEventListener("message", e => { if (e.origin === location.origin && e.data?.type === "preview-ready" && draft) { pushPreview(); try { frameReady().postMessage({ type: "screen", name: dsScreen }, location.origin); } catch {} } });
+  async function loadDesign() {
+    if (DS) return;   // уже завантажено — не затираємо незбережені зміни
+    DS = await api("/admin/api/design");
+    saved = clone(DS.design); draft = clone(DS.design);
+    $("dsNoKey").hidden = DS.falKey;
+    $("dsScreens").innerHTML = SCREENS.map(([k, t]) => `<button data-s="${k}" class="${k === dsScreen ? "on" : ""}">${t}</button>`).join("");
+    $("dsScreens").querySelectorAll("[data-s]").forEach(b => b.onclick = () => { dsScreen = b.dataset.s; $("dsScreens").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); frameReady()?.postMessage({ type: "screen", name: dsScreen }, location.origin); });
+    $("dsFontD").innerHTML = DS.fonts.display.map(f => `<option>${esc(f)}</option>`).join("");
+    $("dsFontB").innerHTML = DS.fonts.body.map(f => `<option>${esc(f)}</option>`).join("");
+    $("dsFontD").onchange = () => { draft.fonts.display = $("dsFontD").value; pushPreview(); };
+    $("dsFontB").onchange = () => { draft.fonts.body = $("dsFontB").value; pushPreview(); };
+    renderDesign();
+    $("dsFrame").src = "/app?preview=1&screen=" + dsScreen;
+  }
+  function renderDesign() {
+    // кольори
+    $("dsColors").innerHTML = Object.entries(DS.theme).map(([k, m]) => `<div class="ds-color"><input type="color" data-c="${k}" value="${esc(draft.theme[k])}" aria-label="${esc(m.label)}"><div><label>${esc(m.label)}</label><input type="text" data-ct="${k}" value="${esc(draft.theme[k])}" maxlength="7"></div></div>`).join("");
+    $("dsColors").querySelectorAll("[data-c]").forEach(i => i.oninput = () => { draft.theme[i.dataset.c] = i.value.toUpperCase(); $("dsColors").querySelector(`[data-ct="${i.dataset.c}"]`).value = i.value.toUpperCase(); pushPreview(); });
+    $("dsColors").querySelectorAll("[data-ct]").forEach(i => i.oninput = () => { if (/^#[0-9a-f]{6}$/i.test(i.value)) { draft.theme[i.dataset.ct] = i.value.toUpperCase(); $("dsColors").querySelector(`[data-c="${i.dataset.ct}"]`).value = i.value; pushPreview(); } });
+    $("dsFontD").value = draft.fonts.display; $("dsFontB").value = draft.fonts.body;
+    // тексти
+    const names = ["Экран 1 — главный", "Экран 2 — чем мы лучше", "Экран 3 — фишки", "Экран 4 — безопасность"];
+    const itemsText = (i, items) => (items || []).map(x => i === 1 ? `${x.title} | ${x.them} | ${x.us}` : `${x.icon} | ${x.title} | ${x.text}`).join("\n");
+    $("dsSlides").innerHTML = DS.defaultSlides.map((d, i) => { const c = draft.slides[i] || {}; return `<div class="ds-slide"><h4>${names[i]}</h4>
+      <div class="field"><label>Заголовок</label><input data-st="${i}" data-k="title" value="${esc(c.title || "")}" placeholder="${esc(d.title)}" maxlength="80"></div>
+      <div class="field"><label>Подзаголовок</label><textarea data-st="${i}" data-k="lead" maxlength="300" placeholder="${esc(d.lead)}" style="min-height:60px">${esc(c.lead || "")}</textarea></div>
+      ${d.items ? `<div class="field"><label>${i === 1 ? "Сравнение: тема | в обычных приложениях | у нас" : "Пункты: эмодзи | заголовок | текст"}</label><textarea data-si="${i}" style="min-height:110px" placeholder="${esc(itemsText(i, d.items))}">${esc(itemsText(i, c.items))}</textarea></div>` : ""}</div>`; }).join("");
+    $("dsSlides").querySelectorAll("[data-st]").forEach(el => el.oninput = () => { const i = +el.dataset.st; draft.slides[i] = { ...(draft.slides[i] || {}), [el.dataset.k]: el.value.trim() }; pushPreview(); });
+    $("dsSlides").querySelectorAll("[data-si]").forEach(el => el.oninput = () => {
+      const i = +el.dataset.si;
+      const items = el.value.split("\n").map(l => l.split("|").map(x => x.trim())).filter(p => p.length >= 2 && p[1])
+        .map(p => i === 1 ? { title: p[0], them: p[1] || "", us: p[2] || "" } : { icon: p[0], title: p[1], text: p[2] || "" });
+      draft.slides[i] = { ...(draft.slides[i] || {}), items }; pushPreview();
+    });
+    // картинки
+    $("dsSlots").innerHTML = Object.entries(DS.slots).map(([k, m]) => `<div class="ds-slot" data-slot="${k}">
+      <div class="cur">${draft.assets[k] ? `<img src="/app/asset/${k}?v=${draft.assets[k]}" alt="">` : "стандартная"}</div>
+      <div><b>${esc(m.title)}</b> <span class="muted" style="font-size:12px">${m.w}×${m.h}</span>
+        <div class="field" style="margin:6px 0"><textarea data-p="${k}" style="min-height:70px">${esc(draft.prompts?.[k] || m.prompt)}</textarea></div>
+        <div class="actions" style="margin:0"><button class="btn acc sm" data-gen="${k}" type="button">Сгенерировать</button>
+          <select data-n="${k}" style="width:auto"><option value="1">1 вариант</option><option value="2">2 варианта</option><option value="3">3 варианта</option></select>
+          ${draft.assets[k] ? `<button class="btn sm" data-reset="${k}" type="button">Вернуть стандартную</button>` : ""}</div>
+        <div class="ds-vars" data-vars="${k}"></div></div></div>`).join("");
+    $("dsSlots").querySelectorAll("[data-p]").forEach(t => t.oninput = () => { draft.prompts = { ...(draft.prompts || {}), [t.dataset.p]: t.value }; });
+    $("dsSlots").querySelectorAll("[data-gen]").forEach(b => b.onclick = () => genSlot(b.dataset.gen, +$("dsSlots").querySelector(`[data-n="${b.dataset.gen}"]`).value));
+    $("dsSlots").querySelectorAll("[data-reset]").forEach(b => b.onclick = async () => { await useImage(b.dataset.reset, "", true); });
+  }
+  async function genSlot(slot, n = 1, auto = false) {
+    const box = $("dsSlots").querySelector(`[data-vars="${slot}"]`), btn = $("dsSlots").querySelector(`[data-gen="${slot}"]`);
+    const prompt = $("dsSlots").querySelector(`[data-p="${slot}"]`).value.trim();
+    btn.disabled = true; box.innerHTML = `<span class="muted" style="font-size:13px">⏳ Рисуем… (20–60 сек)</span>`;
+    try {
+      const r = await api("/admin/api/design/generate", { slot, prompt, n });
+      if (auto) { await useImage(slot, r.urls[0]); return; }
+      box.innerHTML = r.urls.map((u, i) => `<figure><img src="${esc(u)}" alt="Вариант ${i + 1}"><button class="btn sm acc" data-use="${esc(u)}" type="button">Поставить</button></figure>`).join("");
+      box.querySelectorAll("[data-use]").forEach(b => b.onclick = () => useImage(slot, b.dataset.use));
+    } catch (e) { box.innerHTML = `<span style="color:var(--bad);font-size:13px">${esc(e.message)}</span>`; }
+    btn.disabled = false;
+  }
+  async function useImage(slot, url, reset) {
+    try {
+      const prompt = $("dsSlots").querySelector(`[data-p="${slot}"]`)?.value;
+      const r = await api("/admin/api/design/use", { slot, url, reset: !!reset, prompt });
+      draft.assets = r.design.assets; saved.assets = clone(r.design.assets);
+      draft.prompts = { ...(draft.prompts || {}), ...(r.design.prompts || {}) };
+      renderDesign(); pushPreview();
+      toast(reset ? "Вернули стандартную картинку" : "Картинка стоит в приложении");
+      const scr = { hero: "ob0", ob2: "ob1", ob3: "ob2", ob4: "ob3", match: "match", empty: "empty" }[slot];
+      if (scr) $("dsScreens").querySelector(`[data-s="${scr}"]`)?.click();
+    } catch (e) { toast(e.message, true); }
+  }
+  $("dsAi").onclick = async () => {
+    const wish = $("dsWish").value.trim(); if (!wish) return toast("Опишите стиль", true);
+    $("dsAi").disabled = true; $("dsAiMsg").textContent = "⏳ Придумываем… (10–30 сек)";
+    try {
+      const r = await api("/admin/api/design/ai", { prompt: wish });
+      draft = { ...r.design, assets: draft.assets }; renderDesign(); pushPreview();
+      $("dsAiMsg").textContent = "Готово — посмотрите предпросмотр. Нравится? «Сгенерировать все картинки» и «Сохранить дизайн».";
+    } catch (e) { $("dsAiMsg").textContent = ""; toast(e.message, true); }
+    $("dsAi").disabled = false;
+  };
+  $("dsGenAll").onclick = async () => {
+    if (!DS.falKey) return toast("Нет FAL_KEY", true);
+    if (!armed($("dsGenAll"), "Сгенерировать 6 картинок (~$0.30)? Нажмите ещё раз")) return;
+    $("dsGenAll").disabled = true;
+    for (const slot of Object.keys(DS.slots)) { $("dsAiMsg").textContent = `⏳ ${DS.slots[slot].title}…`; await genSlot(slot, 1, true); }
+    $("dsAiMsg").textContent = "Все картинки готовы и стоят в приложении."; $("dsGenAll").disabled = false;
+  };
+  $("dsSave").onclick = async () => {
+    try { const r = await api("/admin/api/design", draft); saved = clone(r.design); draft = clone(r.design); renderDesign(); pushPreview(); $("dsMsg").textContent = "Сохранено ✓ — откройте приложение заново"; setTimeout(() => ($("dsMsg").textContent = ""), 5000); }
+    catch (e) { toast(e.message, true); }
+  };
+  $("dsUndo").onclick = () => { draft = clone(saved); renderDesign(); pushPreview(); };
+  $("dsReset").onclick = () => {
+    if (!armed($("dsReset"), "Вернуть стандартные цвета, шрифты и тексты?")) return;
+    draft = { theme: Object.fromEntries(Object.entries(DS.theme).map(([k, m]) => [k, m.default])), fonts: { display: "Unbounded", body: "Onest" }, slides: [{}, {}, {}, {}], assets: draft.assets, prompts: draft.prompts };
+    renderDesign(); pushPreview(); $("dsMsg").textContent = "Нажмите «Сохранить дизайн», чтобы применить. Картинки сбрасываются отдельно.";
+  };
 
   // ---------- поддержка ----------
   let supSel = null, supTimer = null;

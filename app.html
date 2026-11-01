@@ -28,12 +28,13 @@
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px));
   --vh: var(--tg-viewport-stable-height, 100dvh);
   --stitch: none;        /* орнамент — малюється скриптом */
+  --glow: #1B3375;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; background: var(--night); color: var(--linen); font: 16px/1.45 var(--body); overscroll-behavior: none; -webkit-font-smoothing: antialiased; }
 body { display: flex; flex-direction: column; height: var(--vh); padding-top: var(--safe-top); overflow: hidden; user-select: none; -webkit-user-select: none;
-  background: radial-gradient(120% 60% at 50% -10%, #1B3375 0%, var(--night) 60%) var(--night); }
+  background: radial-gradient(120% 60% at 50% -10%, var(--glow) 0%, var(--night) 60%) var(--night); }
 button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 input, textarea, select { font: inherit; color: var(--linen); background: var(--deep2); border: 1px solid transparent; border-radius: 14px; padding: 12px 14px; width: 100%; user-select: text; -webkit-user-select: text; }
@@ -62,7 +63,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .stage { flex: 1; min-height: 0; position: relative; }
 .card { position: absolute; inset: 0; border-radius: 24px; overflow: hidden; background: var(--deep); touch-action: none; will-change: transform; box-shadow: 0 18px 40px rgba(3, 10, 30, .55); }
 .card img, .card video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
-.card .shade { position: absolute; inset: auto 0 0 0; height: 58%; background: linear-gradient(180deg, rgba(14, 30, 69, 0) 0%, rgba(14, 30, 69, .55) 40%, rgba(10, 21, 50, .95) 100%); pointer-events: none; }
+.card .shade { position: absolute; inset: auto 0 0 0; height: 58%; background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--night) 55%, transparent) 40%, color-mix(in srgb, var(--night) 95%, #000) 100%); pointer-events: none; }
 .card .who { position: absolute; left: 18px; right: 64px; bottom: 18px; pointer-events: none; }
 .who h3 { margin: 0; font: 700 30px/1.05 var(--display); letter-spacing: -.02em; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.35); }
 .who h3 span { font-weight: 500; opacity: .9; }
@@ -98,7 +99,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* таби */
-.tabs { display: flex; background: rgba(14, 30, 69, .92); border-top: 1px solid var(--line); padding: 4px 0 var(--safe-bottom); backdrop-filter: blur(10px); }
+.tabs { display: flex; background: color-mix(in srgb, var(--night) 92%, transparent); border-top: 1px solid var(--line); padding: 4px 0 var(--safe-bottom); backdrop-filter: blur(10px); }
 .tabs button { flex: 1; padding: 7px 0 6px; display: grid; justify-items: center; gap: 2px; color: var(--hint); font-size: 11.5px; font-weight: 600; position: relative; }
 .tabs button svg { width: 24px; height: 24px; }
 .tabs button.on { color: var(--gold); }
@@ -127,7 +128,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .cell { border-radius: 18px; overflow: hidden; background: var(--deep); text-align: left; position: relative; }
 .cell .ph { aspect-ratio: 3/4; background: var(--deep2); }
 .cell .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.cell .t { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 9px; font-size: 14px; background: linear-gradient(180deg, transparent, rgba(10, 21, 50, .92)); }
+.cell .t { position: absolute; left: 0; right: 0; bottom: 0; padding: 30px 10px 9px; font-size: 14px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--night) 92%, #000)); }
 .cell .t b { font-family: var(--display); font-weight: 700; font-size: 14px; }
 .cell.locked .ph img { filter: blur(14px) saturate(.7); transform: scale(1.1); }
 .big { font: 800 64px/1 var(--display); margin: 20px 0 6px; color: var(--gold); }
@@ -191,10 +192,10 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .mmain { position: absolute; left: 5px; right: 5px; bottom: 5px; font-size: 11px; background: rgba(10, 21, 50, .7); color: #fff; border-radius: 8px; padding: 4px; }
 
 /* преміум */
-.prem { position: relative; border-radius: 22px; padding: 18px 16px 16px; background: linear-gradient(160deg, #22407F 0%, var(--deep) 70%); overflow: hidden; }
+.prem { position: relative; border-radius: 22px; padding: 18px 16px 16px; background: linear-gradient(160deg, color-mix(in srgb, var(--deep) 70%, var(--glow) 60%) 0%, var(--deep) 70%); overflow: hidden; }
 .prem::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 10px; background: var(--stitch) repeat-x center / auto 10px; opacity: .9; }
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin: 14px 0 4px; }
-.plan { position: relative; border-radius: 18px; background: rgba(14, 30, 69, .6); border: 1.5px solid var(--line); padding: 16px 6px 12px; text-align: center; }
+.plan { position: relative; border-radius: 18px; background: color-mix(in srgb, var(--night) 60%, transparent); border: 1.5px solid var(--line); padding: 16px 6px 12px; text-align: center; }
 .plan:active { transform: scale(.97); }
 .plan.best { border-color: var(--gold); background: rgba(243, 196, 67, .1); }
 .plan b { display: block; font: 800 24px/1.1 var(--display); color: var(--linen); }
@@ -216,7 +217,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .badge-n { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px; background: var(--red); color: #fff; font: 700 12px/20px var(--body); }
 
 /* взаємність */
-.match { position: fixed; inset: 0; z-index: 30; background: radial-gradient(90% 60% at 50% 35%, #2A4C99 0%, var(--night) 70%); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
+.match { position: fixed; inset: 0; z-index: 30; background: var(--match-bg, none) center / cover no-repeat, radial-gradient(90% 60% at 50% 35%, color-mix(in srgb, var(--glow) 70%, #5A8BFF) 0%, var(--night) 70%); display: none; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; }
 .match.on { display: flex; }
 .match .orn { position: absolute; left: 0; right: 0; }
 .match .orn.t { top: calc(var(--safe-top) + 14px); } .match .orn.b { bottom: calc(var(--safe-bottom) + 14px); }
@@ -249,6 +250,9 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .ob-slide h2 { font-size: 26px; margin: 8px 0 6px; }
 .ob-slide .lead { font-size: 16px; color: var(--hint); margin: 0; }
 .couple { width: 100%; height: auto; display: block; border-radius: 26px; box-shadow: 0 20px 50px rgba(3, 10, 30, .5); }
+.ob-img { width: 100%; aspect-ratio: var(--ar, 6 / 5); object-fit: cover; display: block; border-radius: 26px; box-shadow: 0 20px 50px rgba(3, 10, 30, .5); background: var(--deep); }
+.ob-img.wide { --ar: 9 / 5; margin-bottom: 4px; }
+.empty-img { width: min(240px, 70%); aspect-ratio: 4 / 3; object-fit: cover; border-radius: 20px; display: block; margin: 0 auto 18px; }
 .countries { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .countries span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px 6px 7px; border-radius: 999px; background: var(--deep); font-size: 13.5px; font-weight: 600; }
 .vs { display: grid; gap: 8px; margin-top: 16px; }
@@ -357,23 +361,25 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   const hap = (t = "light") => { try { tg?.HapticFeedback?.impactOccurred(t); } catch {} };
   const ok = t => { try { tg?.HapticFeedback?.notificationOccurred(t); } catch {} };
   function toast(m) { document.querySelectorAll(".toast").forEach(t => t.remove()); const d = document.createElement("div"); d.className = "toast"; d.textContent = m; document.body.appendChild(d); setTimeout(() => d.remove(), 2600); }
-  async function api(path, body) {
+  const PREVIEW = new URLSearchParams(location.search).has("preview") && window.parent !== window;
+  let api = async function (path, body) {
     const r = await fetch("/app/api/" + path, { method: body ? "POST" : "GET", headers: { "content-type": "application/json", "x-init-data": tg?.initData || "" }, body: body ? JSON.stringify(body) : undefined });
     let d = {}; try { d = await r.json(); } catch {}
     if (!r.ok) throw new Error(d.error || "Помилка " + r.status);
     return d;
-  }
+  };
   try { tg.ready(); tg.expand(); tg.disableVerticalSwipes?.(); tg.setHeaderColor?.("#0E1E45"); tg.setBackgroundColor?.("#0E1E45"); tg.setBottomBarColor?.("#0E1E45"); } catch {}
 
   // вишиванка: піксельний орнамент «хрестиком» — ромб і маленький ромбик, червоне й золоте
   function stitchSVG(rows, cell = 2, gap = .35) {
-    const col = { r: "#E2394B", g: "#F3C443" };
+    const cs = getComputedStyle(document.documentElement);
+    const col = { r: cs.getPropertyValue("--red").trim() || "#E2394B", g: cs.getPropertyValue("--gold").trim() || "#F3C443" };
     let rects = "";
     rows.forEach((row, y) => [...row].forEach((ch, x) => { if (col[ch]) rects += `<rect x="${x * cell + gap / 2}" y="${y * cell + gap / 2}" width="${cell - gap}" height="${cell - gap}" fill="${col[ch]}"/>`; }));
     const w = rows[0].length * cell, h = rows.length * cell;
     return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" shape-rendering="crispEdges">${rects}</svg>`)}")`;
   }
-  (() => {
+  function paintStitch() {
     const W = 18, rows = [];
     for (let y = 0; y < 9; y++) {
       let r = "", d = Math.abs(y - 4);
@@ -391,12 +397,42 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     const st = document.documentElement.style;
     st.setProperty("--stitch", stitchSVG(rows));
     st.setProperty("--stitch-heart", stitchSVG(heart, 2, .3));
-  })();
+  }
+  paintStitch();
 
   let ME = null, card = null, nextCard = null, idx = 0, busy = false;
+
+  // ---------- дизайн з адмінки: кольори, шрифти, тексти онбордингу, картинки екранів ----------
+  let DESIGN = { assets: {}, slides: null };
+  const FONT_W = { "Unbounded": "500;700;800", "Montserrat Alternates": "500;700;800", "Comfortaa": "500;700", "Playfair Display": "500;700;800", "Lora": "500;700",
+    "Rubik": "400;500;600;700;800", "Manrope": "400;500;600;700;800", "Russo One": "400", "Onest": "400;500;600;700", "Montserrat": "400;500;600;700",
+    "Nunito": "400;500;600;700", "Inter": "400;500;600;700", "Open Sans": "400;500;600;700", "Roboto": "400;500;700" };
+  const assetUrl = slot => DESIGN.assets?.[slot] ? `/app/asset/${slot}?v=${DESIGN.assets[slot]}` : "";
+  function applyDesign(d) {
+    DESIGN = { ...DESIGN, ...(d || {}) };
+    const st = document.documentElement.style, t = DESIGN.theme || {};
+    const map = { night: "--night", glow: "--glow", deep: "--deep", deep2: "--deep2", gold: "--gold", gold_ink: "--gold-ink", red: "--red", linen: "--linen", hint: "--hint" };
+    Object.entries(map).forEach(([k, v]) => t[k] && st.setProperty(v, t[k]));
+    if (t.linen) st.setProperty("--line", `color-mix(in srgb, ${t.linen} 12%, transparent)`);
+    const f = DESIGN.fonts || {};
+    const fams = [f.display, f.body].filter(x => x && FONT_W[x]);
+    if (fams.length) {
+      const href = "https://fonts.googleapis.com/css2?" + [...new Set(fams)].map(x => `family=${encodeURIComponent(x).replace(/%20/g, "+")}:wght@${FONT_W[x]}`).join("&") + "&display=swap";
+      let l = document.getElementById("dfonts"); if (!l) { l = document.createElement("link"); l.id = "dfonts"; l.rel = "stylesheet"; document.head.appendChild(l); }
+      if (l.href !== href) l.href = href;
+      if (f.display) st.setProperty("--display", `"${f.display}", "${f.body || "Onest"}", system-ui, sans-serif`);
+      if (f.body) st.setProperty("--body", `"${f.body}", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`);
+    }
+    st.setProperty("--match-bg", assetUrl("match") ? `linear-gradient(color-mix(in srgb, var(--night) 55%, transparent), color-mix(in srgb, var(--night) 80%, transparent)), url("${assetUrl("match")}")` : "none");
+    try { const n = t.night || "#0E1E45"; tg?.setHeaderColor?.(n); tg?.setBackgroundColor?.(n); tg?.setBottomBarColor?.(n); } catch {}
+    paintStitch();
+  }
+  async function loadDesign() { try { const r = await fetch("/app/api/design"); if (r.ok) applyDesign(await r.json()); } catch {} }
   const plural = n => n % 10 === 1 && n % 100 !== 11 ? "людині" : "людям";
 
   async function boot() {
+    await loadDesign();
+    if (PREVIEW) return previewBoot();
     if (!tg?.initData) {
       // відкрито не так, як треба (напр. зі старої кнопки під полем вводу або в браузері)
       $("stage").innerHTML = `<div class="empty"><div><b>Відкрий застосунок ще раз</b>Натисни кнопку <b>«❤️ Знайомства»</b> зліва від поля вводу в чаті з ботом${tg?.platform && tg.platform !== "unknown" ? "" : " у Telegram"}.<br><br>${tg?.close ? `<button class="btn primary" id="cl">Закрити</button>` : ""}</div></div>`;
@@ -474,33 +510,29 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   function hello() {
     $("actions").hidden = true;
     const cs = ME.countries || [];
+    const D = DESIGN.slides || [];
+    const T = (k, key, def) => esc(D[k]?.[key] || def);
+    const it = (k, def) => (D[k]?.items?.length ? D[k].items : def);
+    const pic = (slot, wide) => assetUrl(slot) ? `<div class="rise"><img class="ob-img${wide ? " wide" : ""}" src="${assetUrl(slot)}" alt=""></div>` : "";
+    const feat = list => `<div class="feat">${list.map(x => `<div><i>${esc(x.icon || "•")}</i><div><b>${esc(x.title)}</b><span>${esc(x.text || "")}</span></div></div>`).join("")}</div>`;
+    const VS = [{ title: "Хто в стрічці", them: "Місцеві й туристи", us: "Українці, які живуть поруч" }, { title: "Мова", them: "Англійська чи місцева", us: "Українська з першого слова" },
+      { title: "Спільне", them: "Пояснюєш, звідки ти", us: "Земляки з твого міста — першими 🤝" }, { title: "Як почати", them: "Новий додаток, пошта, пароль", us: "Просто в Telegram, за хвилину" }];
+    const F3 = [{ icon: "🤝", title: "Земляки", text: "Люди з твого Львова, Харкова чи Одеси — вище в стрічці й з позначкою." }, { icon: "📍", title: "Поруч з тобою", text: "Анкети за відстанню: твоє місто, твій район. Іншим видно лише км, не адресу." },
+      { icon: "☕️", title: "Вільний сьогодні", text: "Позначка на 24 години — кава після роботи без тижнів переписки." }, { icon: "💌", title: "Суперлайк з повідомленням", text: "Раз на добу — напиши одразу, щоб тебе помітили першим(-ою)." }];
+    const F4 = [{ icon: "🔞", title: "Лише 18+", text: "Тільки дорослі — вік вказується при реєстрації, анкети молодших не показуємо." }, { icon: "🚨", title: "Скарги перевіряє модератор", text: "Фейки, спам і образи — одна кнопка, людина перевіряє анкету." },
+      { icon: "⏸", title: "Пауза будь-коли", text: "Сховай анкету на час — лайки й симпатії збережуться." }, { icon: "🎁", title: "Безкоштовно", text: "Знайомитись можна без оплати. Преміум — за бажанням." }];
     const slides = [
-      `<div class="rise">${COUPLE}</div>
-       <h1 class="rise">Наші поруч.</h1>
-       <p class="lead rise">Знайомства для українців, які живуть за кордоном. Українською — з людьми, які розуміють тебе з півслова.</p>
+      `${assetUrl("hero") ? pic("hero") : `<div class="rise">${COUPLE}</div>`}
+       <h1 class="rise">${T(0, "title", "Наші поруч.")}</h1>
+       <p class="lead rise">${T(0, "lead", "Знайомства для українців, які живуть за кордоном. Українською — з людьми, які розуміють тебе з півслова.")}</p>
        <div class="countries rise">${cs.map(c => `<span>${flag(c)}${esc(c)}</span>`).join("")}</div>`,
-      `<h2 class="rise">Чим ми інші</h2><p class="lead rise">Звичайні додатки знайомств зроблені для всіх. FlirtUA — для наших.</p>
+      `${pic("ob2", true)}<h2 class="rise">${T(1, "title", "Чим ми інші")}</h2><p class="lead rise">${T(1, "lead", "Звичайні додатки знайомств зроблені для всіх. FlirtUA — для наших.")}</p>
        <div class="vs">
          <div class="vs-head"><span class="muted">Звичайні додатки</span><span>${flag("Україна")}FlirtUA</span></div>
-         <div class="vs-row"><div class="them"><small>Хто в стрічці</small><s>Місцеві й туристи</s></div><div class="us"><small>Хто в стрічці</small>Українці, які живуть поруч</div></div>
-         <div class="vs-row"><div class="them"><small>Мова</small><s>Англійська чи місцева</s></div><div class="us"><small>Мова</small>Українська з першого слова</div></div>
-         <div class="vs-row"><div class="them"><small>Спільне</small><s>Пояснюєш, звідки ти</s></div><div class="us"><small>Спільне</small>Земляки з твого міста — першими 🤝</div></div>
-         <div class="vs-row"><div class="them"><small>Як почати</small><s>Новий додаток, пошта, пароль</s></div><div class="us"><small>Як почати</small>Просто в Telegram, за хвилину</div></div>
+         ${it(1, VS).map(x => `<div class="vs-row"><div class="them"><small>${esc(x.title)}</small><s>${esc(x.them || "")}</s></div><div class="us"><small>${esc(x.title)}</small>${esc(x.us || "")}</div></div>`).join("")}
        </div>`,
-      `<h2 class="rise">Зроблено для нашого життя тут</h2><p class="lead rise">Того, що нижче, немає в звичайних додатках.</p>
-       <div class="feat">
-         <div><i>🤝</i><div><b>Земляки</b><span>Люди з твого Львова, Харкова чи Одеси — вище в стрічці й з позначкою.</span></div></div>
-         <div><i>📍</i><div><b>Поруч з тобою</b><span>Анкети за відстанню: твоє місто, твій район. Іншим видно лише км, не адресу.</span></div></div>
-         <div><i>☕️</i><div><b>Вільний сьогодні</b><span>Позначка на 24 години — кава після роботи без тижнів переписки.</span></div></div>
-         <div><i>💌</i><div><b>Суперлайк з повідомленням</b><span>Раз на добу — напиши одразу, щоб тебе помітили першим(-ою).</span></div></div>
-       </div>`,
-      `<h2 class="rise">Безпечно й по-людськи</h2><p class="lead rise">Знайомства, у яких хочеться залишитися.</p>
-       <div class="feat">
-         <div><i>🔞</i><div><b>Лише 18+</b><span>Тільки дорослі — вік вказується при реєстрації, анкети молодших не показуємо.</span></div></div>
-         <div><i>🚨</i><div><b>Скарги перевіряє модератор</b><span>Фейки, спам і образи — одна кнопка, людина перевіряє анкету.</span></div></div>
-         <div><i>⏸</i><div><b>Пауза будь-коли</b><span>Сховай анкету на час — лайки й симпатії збережуться.</span></div></div>
-         <div><i>🎁</i><div><b>Безкоштовно</b><span>Знайомитись можна без оплати. Преміум — за бажанням.</span></div></div>
-       </div>`,
+      `${pic("ob3", true)}<h2 class="rise">${T(2, "title", "Зроблено для нашого життя тут")}</h2><p class="lead rise">${T(2, "lead", "Того, що нижче, немає в звичайних додатках.")}</p>${feat(it(2, F3))}`,
+      `${pic("ob4", true)}<h2 class="rise">${T(3, "title", "Безпечно й по-людськи")}</h2><p class="lead rise">${T(3, "lead", "Знайомства, у яких хочеться залишитися.")}</p>${feat(it(3, F4))}`,
     ];
     $("stage").innerHTML = `<div class="ob">
       <div class="orn big" aria-hidden="true"></div>
@@ -616,7 +648,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   }
 
   // ---------- стрічка ----------
-  async function fetchNext() { const r = await api("next"); return r.empty ? null : r.card; }
+  let fetchNext = async function () { const r = await api("next"); return r.empty ? null : r.card; };
   async function loadNext() {
     $("actions").hidden = true;
     if (nextCard) { card = nextCard; nextCard = null; }
@@ -625,7 +657,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       try { card = await fetchNext(); } catch (e) { $("stage").innerHTML = `<div class="empty"><div><b>Помилка</b>${esc(e.message)}</div></div>`; return; }
     }
     if (!card) {
-      $("stage").innerHTML = `<div class="empty"><div><div class="orn" style="width:120px;margin:0 auto 18px"></div><b>Ти переглянув(-ла) всіх поруч</b>Нові наші реєструються щодня. Розшир вік або країну пошуку — і стрічка оновиться.<br><button class="btn primary" id="toFilters">Змінити фільтри</button><button class="btn" id="retry">Оновити</button></div></div>`;
+      $("stage").innerHTML = `<div class="empty"><div>${assetUrl("empty") ? `<img class="empty-img" src="${assetUrl("empty")}" alt="">` : `<div class="orn" style="width:120px;margin:0 auto 18px"></div>`}<b>Ти переглянув(-ла) всіх поруч</b>Нові наші реєструються щодня. Розшир вік або країну пошуку — і стрічка оновиться.<br><button class="btn primary" id="toFilters">Змінити фільтри</button><button class="btn" id="retry">Оновити</button></div></div>`;
       $("toFilters").onclick = () => go("profile"); $("retry").onclick = loadNext;
       return;
     }
@@ -1004,6 +1036,40 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       $("dPause").onclick = async () => { await api("profile", { paused: true }); ME.me.paused = true; closeSheet(); renderProfile(); toast("⏸ Анкету приховано"); };
       $("dYes").onclick = async () => { try { await api("delete", { confirm: "DELETE" }); closeSheet(); toast("Анкету видалено"); ME = await api("me"); $("tabs").hidden = true; card = nextCard = null; document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "feed")); wizard(); } catch (e) { toast(e.message); } };
     };
+  }
+
+  // ---------- попередній перегляд в адмінці: демо-дані, без Telegram, дизайн приходить через postMessage ----------
+  function previewBoot() {
+    const svgPh = (a, b) => "data:image/svg+xml," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 160"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="90" height="160" fill="url(#g)"/><circle cx="45" cy="62" r="17" fill="#E8B48F"/><path d="M28 60a17 17 0 0 1 34 0c0-12-7-20-17-20s-17 8-17 20z" fill="#4A2C1E"/><rect x="20" y="82" width="50" height="90" rx="22" fill="#24407F"/></svg>`);
+    const P1 = svgPh("#F2B27A", "#6B4A7A"), P2 = svgPh("#8FC1F0", "#2B4A86"), P3 = svgPh("#CFE0A8", "#4F6E3E");
+    const plans = [{ i: 0, days: 7, stars: 250, title: "тиждень", name: "Тиждень", eur: "5 €" }, { i: 1, days: 30, stars: 750, title: "місяць", name: "Місяць", eur: "15 €" }, { i: 2, days: 90, stars: 1750, title: "3 місяці", name: "3 місяці", eur: "35 €" }];
+    ME = { registered: true, bot: "FlirtUa_bot", countries: ["Іспанія", "Польща", "Німеччина", "Чехія", "Італія"], reasons: { fake: "Фейк" }, premiumMinutes: 10, minAge: 18,
+      hometowns: ["Київ", "Львів", "Харків", "Одеса", "Дніпро"], rules: "", disclaimer: "", plans, starEur: 0.02, invited: 2, name: "Оля", likes: 7, superlikeWait: 0, ref: "", supportUnread: 0,
+      me: { id: "1", name: "Оля", age: 27, city: "Валенсія", country: "Іспанія", about: "", hometown: "Львів", media: [{ t: "photo", url: P2 }], mediaRaw: [{ t: "photo", id: "a", url: P2 }], gender: "f", search: "m", location: true, paused: false, freeUntil: 0, premiumUntil: 0 }, filters: {} };
+    const CARD = { id: "2", name: "Андрій", age: 29, city: "Валенсія", country: "Іспанія", about: "Інженер, бігаю по набережній 🙂", hometown: "Львів", sameHome: true, free: true, dist: 3, incoming: false, note: "", media: [{ t: "photo", url: P1 }, { t: "photo", url: P3 }] };
+    api = async (path) => path === "next" ? { card: { ...CARD } } : path === "likes" ? { count: 7, premium: false, items: [] }
+      : path === "matches" ? [{ id: "3", name: "Марко", age: 31, city: "Мадрид", username: "marko", photo: P3 }] : path === "swipe" ? { match: { id: "2", name: "Андрій", username: "andriy", photo: P1 } } : {};
+    let screen = "ob0";
+    const show = name => {
+      screen = name || screen;
+      closeMatch(); closeSheet(); $("tabs").hidden = true; $("top").hidden = true; card = nextCard = null;
+      document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "feed"));
+      if (screen.startsWith("ob")) { hello(); const k = +screen.slice(2); for (let n = 0; n < k; n++) $("obNext").click(); return; }
+      if (screen === "wizard") return wizard();
+      $("tabs").hidden = false; showTop();
+      if (screen === "empty") { const f = fetchNext; fetchNext = async () => null; loadNext().then(() => (fetchNext = f)); return; }
+      if (screen === "match") { loadNext(); return showMatch({ id: "2", name: "Андрій", username: "andriy", photo: P1 }); }
+      if (["likes", "matches", "profile"].includes(screen)) return go(screen);
+      loadNext();
+    };
+    window.addEventListener("message", e => {
+      if (e.origin !== location.origin) return;
+      const m = e.data || {};
+      if (m.type === "design") { applyDesign(m.design); show(); }
+      if (m.type === "screen") show(m.name);
+    });
+    show(new URLSearchParams(location.search).get("screen") || "ob0");
+    try { parent.postMessage({ type: "preview-ready" }, location.origin); } catch {}
   }
 
   boot();
