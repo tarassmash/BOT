@@ -219,6 +219,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         <div class="card" style="background:var(--soft);border:0;margin:6px 0 12px">
           <h3>💎 Премиум за звёзды Telegram</h3>
           <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="sPay"> Продавать Премиум (оплата прямо в боте и в приложении)</label>
+          <div class="field" style="max-width:260px;margin-top:10px"><label for="sStarEur">Сколько стоит 1 звезда для клиента, €</label><input id="sStarEur" type="number" step="0.001" min="0.001" max="1"><span class="hint">≈0,02 € (250 ⭐ ≈ 5 € в магазинах приложений). По нему в боте показывается цена в евро.</span></div>
           <div id="sPlans" style="margin-top:10px"></div>
           <div class="actions" style="margin:6px 0 0"><button class="btn sm" id="sPlanAdd" type="button">+ Тариф</button></div>
           <span class="hint" style="font-size:12.5px;color:var(--muted)">Пустые строки не сохраняются. Звезда при выводе стоит примерно 1–1,3 цента, точный курс — в @BotFather → Balance.</span>
@@ -566,7 +567,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     const d = document.createElement("div"); d.className = "row plan-row"; d.style.marginBottom = "6px";
     d.innerHTML = `<div class="field" style="flex:0 1 140px"><label>Дней</label><input type="number" min="1" max="365" class="pDays" value="${esc(p.days ?? "")}"></div>
       <div class="field" style="flex:0 1 140px"><label>Звёзд ⭐</label><input type="number" min="1" max="100000" class="pStars" value="${esc(p.stars ?? "")}"></div>
+      <div class="field" style="flex:0 1 150px"><label>Клиент платит</label><div class="pEur" style="padding:9px 0;font-weight:700"></div></div>
       <button class="btn sm bad" type="button" style="margin-bottom:4px">✕</button>`;
+    const upd = () => { const st = +d.querySelector(".pStars").value, dd = +d.querySelector(".pDays").value, r = +$("sStarEur").value || 0.02;
+      d.querySelector(".pEur").textContent = st ? `≈ ${(st * r).toFixed(2).replace(".", ",")} €` + (dd ? ` · ${(st * r / dd).toFixed(2).replace(".", ",")} €/день` : "") : "—"; };
+    d.querySelectorAll("input").forEach(i => i.oninput = upd); setTimeout(upd);
     d.querySelector("button").onclick = () => d.remove();
     $("sPlans").appendChild(d);
   }
@@ -576,6 +581,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     $("sAdmins").value = (s.admin_ids || []).join(", ");
     $("sPremium").value = s.premium_minutes; $("sHide").value = s.report_hide;
     $("sPay").checked = s.payments !== false;
+    $("sStarEur").value = s.star_eur ?? 0.02;
+    $("sStarEur").oninput = () => $("sPlans").querySelectorAll(".pStars").forEach(i => i.oninput());
     $("sPlans").innerHTML = ""; (s.plans || []).forEach(planRow);
     $("sCountries").value = (s.countries || []).join("\n");
     $("sOnb").value = s.onboarding || ""; $("sDisc").value = s.disclaimer || ""; $("sPriv").value = s.privacy || ""; $("sBack").value = s.welcome_back || "";
@@ -589,6 +596,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     };
     body.privacy = $("sPriv").value;
     body.payments = $("sPay").checked;
+    body.star_eur = +$("sStarEur").value || 0.02;
     body.plans = [...$("sPlans").querySelectorAll(".plan-row")].map(r => ({ days: +r.querySelector(".pDays").value, stars: +r.querySelector(".pStars").value })).filter(p => p.days || p.stars);
     try { await api("/admin/api/settings", body); $("sMsg").textContent = "Сохранено ✓"; setTimeout(() => $("sMsg").textContent = "", 3000); stats = null; }
     catch (e) { toast(e.message, true); }

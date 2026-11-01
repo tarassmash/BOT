@@ -685,6 +685,11 @@ class Admin:
             s["plans"] = sorted(pl, key=lambda x: x["days"])[:6]
         if "payments" in b:
             s["payments"] = bool(b["payments"])
+        if "star_eur" in b:
+            v = float(b["star_eur"] or 0)
+            if not 0.001 <= v <= 1:
+                raise ValueError("Курс звезды: от 0.001 до 1 €")
+            s["star_eur"] = round(v, 4)
         if "report_hide" in b:
             s["report_hide"] = max(0, min(50, int(b["report_hide"])))
         if "admin_ids" in b:

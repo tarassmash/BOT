@@ -94,7 +94,7 @@ h2 { margin: 0 0 4px; font-size: 22px; }
 .plan:active { transform: scale(.97); }
 .plan.best { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg2)); }
 .plan b { display: block; font-size: 21px; line-height: 1.1; }
-.plan .pt { display: block; font-size: 14px; margin-top: 3px; }
+.plan .pt { display: block; font-size: 14px; margin-bottom: 2px; font-weight: 600; }
 .plan small { display: block; color: var(--hint); font-size: 11.5px; margin-top: 2px; }
 .plan em { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10.5px; font-weight: 700; background: var(--accent); color: var(--accent-text); padding: 1px 8px; border-radius: 8px; white-space: nowrap; }
 .plan[disabled] { opacity: .5; }
@@ -219,7 +219,9 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     const ps = ME.plans || [];
     if (!ps.length) return "";
     const perDay = p => p.stars / p.days, best = ps.length > 1 ? ps.reduce((a, b) => perDay(b) < perDay(a) ? b : a) : null;
-    return `<div class="plans">${ps.map(p => `<button class="plan ${p === best ? "best" : ""}" data-plan="${p.i}">${p === best ? "<em>Вигідно</em>" : ""}<b>⭐ ${p.stars}</b><span class="pt">${esc(p.title)}</span><small>≈ ${Math.max(1, Math.round(perDay(p)))} ⭐ / день</small></button>`).join("")}</div>
+    const euroDay = p => { const v = p.stars * (ME.starEur || 0.02) / p.days; return (v < 1 ? v.toFixed(2) : v.toFixed(1)).replace(".", ",") + " €"; };
+    return `<div class="plans">${ps.map(p => `<button class="plan ${p === best ? "best" : ""}" data-plan="${p.i}">${p === best ? "<em>Вигідно</em>" : ""}<span class="pt">${esc(p.name || p.title)}</span><b>≈${esc(p.eur)}</b><small>⭐ ${p.stars}</small><small style="white-space:nowrap">${euroDay(p)}/день</small></button>`).join("")}</div>
+      <p class="muted" style="font-size:12px;margin:4px 2px 0">Оплата зірками Telegram ⭐. Ціна в євро приблизна — залежить від країни й телефону.</p>
       <button class="linkish" data-terms>Умови оплати</button>`;
   }
   function bindPlans(root, after) {
@@ -227,7 +229,8 @@ h2 { margin: 0 0 4px; font-size: 22px; }
     root.querySelectorAll("[data-terms]").forEach(b => b.onclick = showTerms);
   }
   function showTerms() {
-    sheet(`<h2>💎 Умови Преміуму</h2>${(ME.plans || []).map(p => `<p style="margin:6px 0">⭐ <b>${p.stars}</b> — ${esc(p.title)} (${p.days} дн.)</p>`).join("")}
+    sheet(`<h2>💎 Умови Преміуму</h2>${(ME.plans || []).map(p => `<p style="margin:6px 0"><b>${esc(p.name || p.title)} — ≈${esc(p.eur)}</b> <span class="muted">(${p.stars} ⭐, ${p.days} дн.)</span></p>`).join("")}
+      <p class="muted">Оплата йде зірками Telegram. Ціна в євро приблизна: зірки купуються в Telegram, і їхня ціна трохи залежить від країни й способу купівлі.</p>
       <p class="muted">Разова оплата зірками Telegram, без автосписань. Дні додаються до поточного строку. Оплачений Преміум зберігається, навіть якщо видалити анкету й створити нову.</p>
       <p class="muted">Не активувався або щось пішло не так — напиши в підтримку, ми нарахуємо дні або повернемо зірки.</p>
       <button class="btn primary" id="tSup">💬 Написати в підтримку</button>`);

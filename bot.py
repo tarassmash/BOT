@@ -109,7 +109,8 @@ SETTINGS = {
     "welcome_back": "❤️ З поверненням!",
     "countries": list(COUNTRIES),
     "premium_minutes": 10,
-    "plans": [{"days": 7, "stars": 75}, {"days": 30, "stars": 250}, {"days": 90, "stars": 600}],  # Преміум за зірки
+    "plans": [{"days": 7, "stars": 250}, {"days": 30, "stars": 750}, {"days": 90, "stars": 1750}],  # Преміум за зірки: ≈5 € / 15 € / 35 €
+    "star_eur": 0.02,  # скільки євро приблизно платить людина за 1 зірку (250 ⭐ ≈ 5 € у магазинах застосунків)
     "payments": True,
     "report_hide": 3,
     "admin_ids": [],
@@ -135,6 +136,8 @@ async def load_settings():
         for k, v in (doc.to_dict() or {}).items():
             if k in SETTINGS and v not in (None, "", []):
                 SETTINGS[k] = v
+    if SETTINGS.get("plans") == OLD_DEFAULT_PLANS:
+        SETTINGS["plans"] = list(DEFAULT_PLANS)
 
 async def save_settings(new):
     SETTINGS.update(new)
@@ -208,7 +211,8 @@ dp.callback_query.outer_middleware(GuardMiddleware())
 # Обробники стоять тут, вище за кроки реєстрації: платіж, що прийшов посеред анкети,
 # не має потрапити у відповідь на питання.
 # =========================================================
-DEFAULT_PLANS = [{"days": 7, "stars": 75}, {"days": 30, "stars": 250}, {"days": 90, "stars": 600}]
+DEFAULT_PLANS = [{"days": 7, "stars": 250}, {"days": 30, "stars": 750}, {"days": 90, "stars": 1750}]
+OLD_DEFAULT_PLANS = [{"days": 7, "stars": 75}, {"days": 30, "stars": 250}, {"days": 90, "stars": 600}]  # перші ціни (≈1,5 € за тиждень) — замінюємо на нові, якщо їх не міняли в адмінці
 
 def plans():
     """Тарифи з адмінки: [{"days": 7, "stars": 75}, ...]"""
@@ -225,6 +229,21 @@ def plans():
 def payments_on():
     return SETTINGS.get("payments", True) is not False
 
+def star_eur():
+    try:
+        return max(0.001, float(SETTINGS.get("star_eur") or 0.02))
+    except Exception:
+        return 0.02
+
+def eur(stars):
+    """Приблизна ціна в євро: 250 ⭐ → «5 €», 75 ⭐ → «1,5 €»."""
+    v = stars * star_eur()
+    t = f"{round(v):d}" if v >= 10 or abs(v - round(v)) < 0.05 else f"{v:.1f}".replace(".", ",")
+    return f"{t} €"
+
+def plan_name(days):
+    return {7: "Тиждень", 30: "Місяць", 90: "3 місяці", 180: "Пів року", 365: "Рік"}.get(days, f"{days} дн.")
+
 def plan_title(days):
     return {7: "тиждень", 30: "місяць", 90: "3 місяці", 180: "пів року", 365: "рік"}.get(days, f"{days} дн.")
 
@@ -237,8 +256,8 @@ def premium_until(p):
 def invoice_args(uid, plan):
     d, s = plan["days"], plan["stars"]
     return dict(
-        title=f"Преміум на {plan_title(d)}",
-        description=f"«Хто мене лайкнув?» на {d} дн.: бачиш усіх, кому сподобався(-лась), і відповідаєш взаємністю.",
+        title=f"Преміум на {plan_title(d)} — ≈{eur(s)}",
+        description=f"«Хто мене лайкнув?» на {d} дн.: бачиш усіх, кому сподобався(-лась), і відповідаєш взаємністю. {s} ⭐ ≈ {eur(s)}.",
         payload=f"prem:{d}:{s}:{uid}",
         currency="XTR",  # зірки Telegram: оплата всередині Telegram, provider_token не потрібен
         prices=[types.LabeledPrice(label=f"Преміум {d} дн.", amount=s)],
@@ -319,11 +338,13 @@ def premium_text(p):
     head = f"💎 <b>Преміум активний до {fmt_until(u)}</b>\nМожна продовжити — дні додадуться.\n\n" if u > time.time() else "💎 <b>Преміум</b>\n\n"
     return (head + "• бачиш усіх, хто тебе лайкнув, — з фото й анкетою\n"
             "• відповідаєш взаємністю одним дотиком\n\n"
-            "Оплата зірками Telegram ⭐ прямо тут, без картки й сторонніх сайтів.\n"
+            + "".join(f"💶 <b>{plan_name(x['days'])} — ≈{eur(x['stars'])}</b> ({x['stars']} ⭐)\n" for x in plans()) + "\n"
+            "Оплата зірками Telegram ⭐ прямо тут, без картки й сторонніх сайтів. "
+            "Ціна в євро — приблизна: зірки купуються в Telegram, ціна трохи залежить від країни й телефону.\n"
             f"🎁 Або запроси друга — ви обоє отримаєте {premium_minutes()} хв безкоштовно.")
 
 async def plans_kb(uid):
-    rows = [[(f"⭐ {p['stars']} — {plan_title(p['days'])}", f"buy:{i}")] for i, p in enumerate(plans())] if payments_on() else []
+    rows = [[(f"{plan_name(p['days'])} — ≈{eur(p['stars'])} · {p['stars']} ⭐", f"buy:{i}")] for i, p in enumerate(plans())] if payments_on() else []
     link = ref_link(await bot_username(), uid)
     return ikb(rows + [[(B_INVITE, "url:" + share_url(link))]])
 
@@ -350,7 +371,8 @@ async def cb_buy(callback: types.CallbackQuery):
 
 @dp.message(Command("terms"))
 async def cmd_terms(message: types.Message):
-    lst = "\n".join(f"• {plan_title(p['days'])} ({p['days']} дн.) — {p['stars']} ⭐" for p in plans())
+    lst = "\n".join(f"• {plan_name(p['days'])} ({p['days']} дн.) — {p['stars']} ⭐ ≈ {eur(p['stars'])}" for p in plans())
+    lst += "\n\nЦіна в євро приблизна: оплата йде зірками Telegram, а їхня ціна трохи залежить від країни й способу купівлі."
     await message.answer(
         "📄 <b>Умови Преміуму</b>\n\n" + lst + "\n\n"
         "• Оплата разова, зірками Telegram, без автосписань. Дні додаються до поточного строку.\n"
@@ -1801,7 +1823,7 @@ async def show_likes(chat_id, uid):
             "Ці люди покажуться першими, коли відкриєш анкети 👥\n\n"
             "🔓 Щоб одразу побачити всіх списком — оформи 💎 Преміум за зірки Telegram"
             f" або запроси друга: ви обоє отримаєте Преміум на {premium_minutes()} хв.",
-            parse_mode="HTML", reply_markup=ikb(([[(f"💎 Преміум — від {min(p['stars'] for p in plans())} ⭐", "premium")]] if payments_on() else [])
+            parse_mode="HTML", reply_markup=ikb(([[(f"💎 Преміум — від ≈{eur(min(p['stars'] for p in plans()))} на тиждень" if any(p['days'] == 7 for p in plans()) else f"💎 Преміум — від ≈{eur(min(p['stars'] for p in plans()))}", "premium")]] if payments_on() else [])
                                                 + [[("👥 Дивитися анкети", "f:more")], [("🎁 Запросити друга", "url:" + share_url(link))]]))
     await safe_send_message(chat_id, f"💎 <b>Тебе лайкнули: {n}</b>", parse_mode="HTML")
     for like in likes[:10]:
