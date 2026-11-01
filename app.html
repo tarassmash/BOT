@@ -210,6 +210,11 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 /* преміум */
 .prem { position: relative; border-radius: 22px; padding: 18px 16px 16px; background: linear-gradient(160deg, color-mix(in srgb, var(--deep) 70%, var(--glow) 60%) 0%, var(--deep) 70%); overflow: hidden; }
 .prem::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 10px; background: var(--stitch) repeat-x center / auto 10px; opacity: .9; }
+.plan-one { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 0 4px; padding: 14px 14px 14px 16px; border-radius: 18px; border: 1.5px solid var(--gold); background: color-mix(in srgb, var(--gold) 9%, transparent); }
+.plan-one .pt { font-weight: 600; font-size: 14px; }
+.plan-one b { display: block; font: 800 28px/1.05 var(--display); color: var(--gold); }
+.plan-one small { color: var(--hint); font-size: 12.5px; }
+.plan-one .btn { width: auto; margin: 0; padding: 13px 18px; flex: none; }
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin: 14px 0 4px; }
 .plan { position: relative; border-radius: 18px; background: color-mix(in srgb, var(--night) 60%, transparent); border: 1.5px solid var(--line); padding: 16px 6px 12px; text-align: center; }
 .plan:active { transform: scale(.97); }
@@ -609,6 +614,12 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     if (!ps.length) return "";
     const perDay = p => p.stars / p.days, best = ps.length > 1 ? ps.reduce((a, b) => perDay(b) < perDay(a) ? b : a) : null;
     const euroDay = p => { const v = p.stars * (ME.starEur || 0.02) / p.days; return (v < 1 ? v.toFixed(2) : v.toFixed(1)).replace(".", ",") + " €"; };
+    if (ps.length === 1) {   // один пакет — одна чітка пропозиція з кнопкою
+      const p = ps[0];
+      return `<div class="plan-one"><div><span class="pt">Преміум на ${esc(p.title || p.name)}</span><b>≈${esc(p.eur)}</b><small>⭐ ${p.stars} · ≈${euroDay(p)} на день</small></div><button class="btn primary" data-plan="${p.i}">Оформити</button></div>
+      <p class="muted" style="font-size:12px;margin:4px 2px 0">Оплата зірками Telegram ⭐, без автосписань. Ціна в євро приблизна — залежить від країни й телефону.</p>
+      <button class="linkish" data-terms>Умови оплати</button>`;
+    }
     return `<div class="plans">${ps.map(p => `<button class="plan ${p === best ? "best" : ""}" data-plan="${p.i}">${p === best ? "<em>Вигідно</em>" : ""}<span class="pt">${esc(p.name || p.title)}</span><b>≈${esc(p.eur)}</b><small>⭐ ${p.stars}</small><small style="white-space:nowrap">${euroDay(p)}/день</small></button>`).join("")}</div>
       <p class="muted" style="font-size:12px;margin:4px 2px 0">Оплата зірками Telegram ⭐. Ціна в євро приблизна — залежить від країни й телефону.</p>
       <button class="linkish" data-terms>Умови оплати</button>`;
