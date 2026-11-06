@@ -284,6 +284,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           <span class="hint" style="font-size:12.5px;color:var(--muted)">В чате остаются уведомления о лайках и симпатиях, оплата, поддержка и ваши админ-команды. Меню команд бота обновится после перезапуска сервиса.</span>
         </div>
         <div class="card" style="background:var(--soft);border:0;margin:6px 0 12px">
+          <h3>🎁 Бонус за главный экран</h3>
+          <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="sHome"> Дарить бонус за FlirtUA на главном экране телефона + заполненную анкету</label>
+          <div class="row" style="margin-top:10px">
+            <div class="field" style="flex:0 1 200px"><label for="sHomeDays">Премиум, дней</label><input id="sHomeDays" type="number" min="0" max="30"></div>
+            <div class="field" style="flex:0 1 240px"><label for="sHomeBoost">Буст анкеты в ленте, часов</label><input id="sHomeBoost" type="number" min="0" max="336"><span class="hint">Анкета показывается выше, как «Вільний сьогодні». 0 — без буста.</span></div>
+          </div>
+          <span class="hint" style="font-size:12.5px;color:var(--muted)">При первом запуске приложение показывает инструкцию «Додати на головний екран» (iOS и Android). Бонус выдаётся один раз на Telegram-аккаунт — даже если удалить анкету и создать заново.</span>
+        </div>
+        <div class="card" style="background:var(--soft);border:0;margin:6px 0 12px">
           <h3>💎 Премиум за звёзды Telegram</h3>
           <label style="display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="sPay"> Продавать Премиум (оплата прямо в боте и в приложении)</label>
           <div class="field" style="max-width:260px;margin-top:10px"><label for="sStarEur">Сколько стоит 1 звезда для клиента, €</label><input id="sStarEur" type="number" step="0.001" min="0.001" max="1"><span class="hint">≈0,02 € (250 ⭐ ≈ 5 € в магазинах приложений). По нему в боте показывается цена в евро.</span></div>
@@ -390,6 +399,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       k("Новых жалоб", num(s.reportsNew), `скрыто ${num(s.hidden)} · бан ${num(s.banned)}`),
       k("Пришли по приглашению", num(s.referred), `${pct(s.referred, s.total)} от всех · Премиум сейчас у ${num(s.premium)}`),
       k("Звёзд за 30 дней", s.stars30 == null ? "—" : "⭐ " + num(s.stars30), s.starsTotal == null ? "оплаты" : `всего ⭐ ${num(s.starsTotal)} · платили ${num(s.payers)} чел.`),
+      k("📲 На главном экране", num(s.homeAdded), `${pct(s.homeAdded, s.total)} от всех · за 7 дней ${num(s.homeAdded7)} · буст сейчас у ${num(s.boosted)}`),
       k("С геолокацией", num(s.location), `${pct(s.location, s.total)} · заблокировали бота ${num(s.blocked)}`),
     ].join("") + (s.minors ? `<div class="card kpi" style="border-color:var(--bad)"><div class="l" style="color:var(--bad)">Младше 18</div><div class="v">${num(s.minors)}</div><div class="s">зарегистрировались до запрета — <a href="#" id="seeMinors">посмотреть</a></div></div>` : "");
     if ($("seeMinors")) $("seeMinors").onclick = e => { e.preventDefault(); $("fStatus").value = "minor"; $("tabs").querySelector('[data-tab="users"]').click(); };
@@ -757,6 +767,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     $("sPremium").value = s.premium_minutes; $("sHide").value = s.report_hide;
     $("sPay").checked = s.payments !== false;
     $("sAppOnly").checked = s.app_only !== false;
+    $("sHome").checked = s.home_bonus !== false; $("sHomeDays").value = s.home_bonus_days ?? 3; $("sHomeBoost").value = s.home_boost_hours ?? 48;
     $("sStarEur").value = s.star_eur ?? 0.02;
     $("sStarEur").oninput = () => $("sPlans").querySelectorAll(".pStars").forEach(i => i.oninput());
     $("sPlans").innerHTML = ""; (s.plans || []).forEach(planRow);
@@ -773,6 +784,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     body.privacy = $("sPriv").value;
     body.payments = $("sPay").checked;
     body.app_only = $("sAppOnly").checked;
+    body.home_bonus = $("sHome").checked; body.home_bonus_days = +$("sHomeDays").value || 0; body.home_boost_hours = +$("sHomeBoost").value || 0;
     body.star_eur = +$("sStarEur").value || 0.02;
     body.plans = [...$("sPlans").querySelectorAll(".plan-row")].map(r => ({ days: +r.querySelector(".pDays").value, stars: +r.querySelector(".pStars").value })).filter(p => p.days || p.stars);
     try { await api("/admin/api/settings", body); $("sMsg").textContent = "Сохранено ✓"; setTimeout(() => $("sMsg").textContent = "", 3000); stats = null; }

@@ -105,6 +105,9 @@ class MiniApp:
                   "starEur": c.star_eur(),
                   "minAge": c.MIN_AGE, "hometowns": c.HOMETOWNS, "rules": c.privacy_text(), "disclaimer": c.SETTINGS.get("disclaimer", ""),
                   "name": (tg_user.get("first_name") or "")[:30]}
+        hb = c.home_bonus()
+        claimed = await self.home_claimed(uid)
+        common["homeBonus"] = {**hb, "on": hb["on"] and bool(hb["days"] or hb["hours"]), "claimed": claimed}
         if not p:
             return web.json_response({"registered": False, **common})
         likes = len(list(await asyncio.to_thread(lambda: c.user_ref(uid).collection("likes").limit(99).get())))
@@ -120,13 +123,36 @@ class MiniApp:
             "me": {**self.card({**p, "tg_id": uid}), "gender": "m" if p.get("gender") == c.MEN else "f", "search": "m" if "Хлопця" in str(p.get("search")) else "f",
                    "mediaRaw": [{"t": m.get("t", "photo"), "id": m["id"], "url": self.media_url(m)} for m in c.media_list(p)],
                    "location": p.get("lat") is not None, "paused": bool(p.get("paused")), "freeUntil": int(p.get("free_until") or 0),
-                   "premiumUntil": int(p.get("likes_view_until") or 0), "username": p.get("username", "") or tg_user.get("username", "")},
+                   "premiumUntil": int(p.get("likes_view_until") or 0), "boostUntil": int(p.get("boost_until") or 0),
+                   "homeAdded": bool(p.get("home_added_at")), "username": p.get("username", "") or tg_user.get("username", "")},
             "filters": {"country": f.get("country"), "min_age": f.get("min_age"), "max_age": f.get("max_age")},
             "likes": likes,
             "superlikeWait": int(await c.superlike_wait(uid)),
             "ref": ref_link(bot_name, uid),
             "supportUnread": await self.support_unread(uid),
         })
+
+    async def home_claimed(self, uid):
+        try:
+            d = await self.c.firebase_get(self.c.db.collection("home_bonus").document(uid))
+            return bool(d and d.exists)
+        except Exception:
+            return False
+
+    async def home_bonus(self, req):
+        """Застосунок додано на головний екран (Telegram.WebApp: homeScreenAdded / checkHomeScreenStatus).
+        Бонус — лише з заповненою анкетою і один раз; повторні виклики безпечні."""
+        uid, _ = self.user_id(req)
+        b = await req.json()
+        status = str(b.get("status", ""))
+        if status not in ("added", "confirmed"):
+            return web.json_response({"error": "Спершу додай FlirtUA на головний екран"}, status=400)
+        ok, info = await self.c.grant_home_bonus(uid, status)
+        if not ok:
+            if info == "noprofile":
+                return web.json_response({"ok": False, "reason": info, "error": "Заповни анкету з фото — і бонус твій"}, status=400)
+            return web.json_response({"ok": False, "reason": info})
+        return web.json_response({"ok": True, **info})
 
     async def support_unread(self, uid):
         try:
@@ -496,6 +522,7 @@ class MiniApp:
         r.add_post("/app/api/media", self.set_media)
         r.add_post("/app/api/delete", self.delete)
         r.add_post("/app/api/invoice", self.invoice)
+        r.add_post("/app/api/home", self.home_bonus)
         r.add_get("/app/api/premium", self.premium)
         r.add_get("/app/api/support", self.support_get)
         r.add_post("/app/api/support", self.support_post)

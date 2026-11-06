@@ -213,6 +213,9 @@ class Admin:
             "blocked": sum(1 for u in us if u.get("blocked_bot")),
             "premium": sum(1 for u in us if int(u.get("likes_view_until") or 0) > time.time()),
             "referred": sum(1 for u in us if u.get("referred_by")),
+            "homeAdded": sum(1 for u in us if u.get("home_added_at")),
+            "homeAdded7": sum(1 for u in us if int(u.get("home_added_at") or 0) > time.time() - 7 * DAY),
+            "boosted": sum(1 for u in us if int(u.get("boost_until") or 0) > time.time()),
             "minors": sum(1 for u in us if isinstance(u.get("age"), int) and u["age"] < 18),
             "reportsNew": reports_new,
             "matches": matches,
@@ -697,6 +700,12 @@ class Admin:
             if not 0.001 <= v <= 1:
                 raise ValueError("Курс звезды: от 0.001 до 1 €")
             s["star_eur"] = round(v, 4)
+        if "home_bonus" in b:
+            s["home_bonus"] = bool(b["home_bonus"])
+        if "home_bonus_days" in b:
+            s["home_bonus_days"] = max(0, min(30, int(b["home_bonus_days"] or 0)))
+        if "home_boost_hours" in b:
+            s["home_boost_hours"] = max(0, min(24 * 14, int(b["home_boost_hours"] or 0)))
         if "report_hide" in b:
             s["report_hide"] = max(0, min(50, int(b["report_hide"])))
         if "admin_ids" in b:

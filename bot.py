@@ -116,6 +116,10 @@ SETTINGS = {
     "admin_ids": [],
     "nudges": True,
     "app_only": True,  # усе — у застосунку: у чаті лише кнопка «Відкрити», сповіщення, оплата й підтримка
+    # 🎁 привітальний бонус за іконку FlirtUA на головному екрані + заповнену анкету (один раз на людину)
+    "home_bonus": True,
+    "home_bonus_days": 3,    # днів Преміуму
+    "home_boost_hours": 48,  # годин підвищеної видимості анкети в стрічці
 }
 ENV_ADMINS = {x.strip() for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()}
 BANNED = set()
@@ -128,6 +132,12 @@ def countries():
 
 def premium_minutes():
     return int(SETTINGS.get("premium_minutes") or 10)
+
+def home_bonus():
+    """Умови бонусу за головний екран: {on, days, hours}."""
+    return {"on": SETTINGS.get("home_bonus", True) is not False,
+            "days": max(0, int(SETTINGS.get("home_bonus_days") or 0)),
+            "hours": max(0, int(SETTINGS.get("home_boost_hours") or 0))}
 
 async def load_settings():
     if not db:
@@ -768,6 +778,40 @@ def dist_km(me, p):
 def is_free(p):
     return int(p.get("free_until") or 0) > time.time()
 
+def is_boosted(p):
+    """🚀 Буст (привітальний бонус): анкета вище в стрічці, без окремої позначки."""
+    return int(p.get("boost_until") or 0) > time.time()
+
+async def grant_home_bonus(uid, status):
+    """Привітальний бонус за FlirtUA на головному екрані. Рівно один раз на Telegram-акаунт —
+    навіть якщо анкету видалити і створити знову (запис home_bonus/{uid} створюється атомарно).
+    → (ok, дані) або (False, причина)."""
+    uid = str(uid)
+    cfg = home_bonus()
+    p = await get_user(uid)
+    if not p or not visible({**p, "paused": False, "hidden": False}):
+        return False, "noprofile"
+    if p.get("banned") or uid in BANNED:
+        return False, "banned"
+    now = int(time.time())
+    if not p.get("home_added_at"):
+        await update_user(uid, {"home_added_at": now})
+    if not cfg["on"] or not (cfg["days"] or cfg["hours"]):
+        return False, "off"
+    try:
+        await asyncio.to_thread(db.collection("home_bonus").document(uid).create,
+                                {"ts": now, "status": str(status)[:20], "days": cfg["days"], "hours": cfg["hours"]})
+    except AlreadyExists:
+        return False, "already"
+    upd = {}
+    if cfg["days"]:
+        upd["likes_view_until"] = max(now, int(p.get("likes_view_until") or 0)) + cfg["days"] * 86400
+    if cfg["hours"]:
+        upd["boost_until"] = max(now, int(p.get("boost_until") or 0)) + cfg["hours"] * 3600
+    await update_user(uid, upd)
+    return True, {**cfg, "premiumUntil": upd.get("likes_view_until") or int(p.get("likes_view_until") or 0),
+                  "boostUntil": upd.get("boost_until", 0)}
+
 def same_home(me, p):
     a, b = str((me or {}).get("hometown") or "").strip().lower(), str(p.get("hometown") or "").strip().lower()
     return bool(a and a == b)
@@ -908,8 +952,8 @@ async def find_next(user_id):
     if not cand:
         return None, "empty", me
     my_age = me.get("age", 25)
-    # ☕️ вільні сьогодні та земляки — вище; далі відстань і вік
-    cand.sort(key=lambda c: (0 if is_free(c) else 1, 0 if same_home(me, c) else 1, dist_km(me, c) or 99999, abs(c.get("age", 99) - my_age), random.random()))
+    # ☕️ вільні сьогодні, 🚀 з бустом і земляки — вище; далі відстань і вік
+    cand.sort(key=lambda c: (0 if is_free(c) or is_boosted(c) else 1, 0 if same_home(me, c) else 1, dist_km(me, c) or 99999, abs(c.get("age", 99) - my_age), random.random()))
     p = cand[0]
     await firebase_set(ref.collection("seen").document(p["tg_id"]), {"ts": firestore.SERVER_TIMESTAMP})
     return p, False, me
