@@ -3,6 +3,7 @@
 Источники:
   • TGStat API (channels/search) — токен TGSTAT_TOKEN в Railway или в админке; нужен тариф Stat API S+.
   • Свой Telegram-аккаунт (Telethon): api_id/api_hash с my.telegram.org, вход по коду прямо в админке.
+  • TikTok — через Apify (актор clockworks/tiktok-user-search-scraper), токен APIFY_TOKEN или в админке.
 
 Отправка — полуавтомат: админка готовит личное сообщение и персональную ссылку, админ жмёт «Написать»
 (открывается чат в Telegram с готовым текстом) и отправляет сам. Массовые сообщения незнакомым людям
@@ -39,8 +40,23 @@ DEFAULT_TEMPLATE = """Вітаю! 👋 Мене звати {my_name}, я з ко
 
 Підкажіть, будь ласка, вартість і найближчі вільні дати? 🙏"""
 
+DEFAULT_TT_QUERIES = "українці {city}\nукраинцы {city}\nукраїнка {city}\nukrainian {city}"
+
+DEFAULT_TT_TEMPLATE = """Привіт! 👋 Мене звати {my_name}, я з команди FlirtUA — знайомства для українців за кордоном прямо в Telegram (@{bot}).
+
+Дивимося ваші відео — у вас класна українська аудиторія ({city}, {members} підписників). Хочемо запропонувати платну рекламну інтеграцію: коротке відео або згадку FlirtUA.
+
+Від нас — ідеї для ролика й персональне посилання для ваших глядачів: {link}
+
+Підкажіть, будь ласка, вартість і умови? 🙏"""
+
+APIFY_ACTOR = "clockworks~tiktok-user-search-scraper"
+
 DEFAULTS = {"cities": DEFAULT_CITIES, "queries": DEFAULT_QUERIES, "template": DEFAULT_TEMPLATE, "min_members": 500,
-            "auto": True, "every_hours": 24, "max_queries": 40, "my_name": "", "tgstat_token": "", "notify": True}
+            "auto": True, "every_hours": 24, "max_queries": 40, "my_name": "", "tgstat_token": "", "notify": True,
+            # TikTok (Apify): ≈ $2.5 за 1000 профілів — ліміти тримають витрати під контролем
+            "tt_on": True, "tt_queries": DEFAULT_TT_QUERIES, "tt_template": DEFAULT_TT_TEMPLATE, "tt_min": 1000,
+            "tt_max_queries": 8, "tt_per_query": 20, "apify_token": ""}
 
 UKR = ("україн", "украин", "ukrain", "🇺🇦", "наші ", "наши ", "земляк", "укр ")
 AD_WORDS = re.compile(r"(реклам|співпрац|сотруднич|по питан|по вопрос|admin|адмін|админ|\bads?\b|зв['’]яз|связ|менеджер|contact|пиш[іи]ть|пишите|власник|владел)", re.I)
@@ -82,6 +98,37 @@ def find_contact(about, own=""):
             best = h
             break
     return best or first
+
+
+EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+TG_IN_BIO = re.compile(r"(?:t(?:elegram)?\.me/|(?<![\wА-Яа-яІіЇїЄєҐґ])(?:tg|telegram|телеграмм?|тг)(?![\wА-Яа-яІіЇїЄєҐґ])\s*[:\-–—]?\s*@?)([A-Za-z][A-Za-z0-9_]{3,31})", re.I)
+IG_IN_BIO = re.compile(r"(?:instagram\.com/|(?<![\wА-Яа-яІіЇїЄєҐґ])(?:inst|insta|instagram|ig|інст|инст|інстаграм|инстаграм)(?![\wА-Яа-яІіЇїЄєҐґ])\s*[:\-–—]?\s*@?)([A-Za-z0-9_.]{2,30})", re.I)
+
+
+def bio_contacts(*texts):
+    """Контакти з профілю TikTok: Telegram (лише явний — t.me/… або «tg: @…»), пошта, Instagram."""
+    t = " ".join(str(x or "") for x in texts)
+    tg, em, ig = TG_IN_BIO.search(t), EMAIL.search(t), IG_IN_BIO.search(t)
+    return {"contact": tg.group(1) if tg else "", "email": em.group(0) if em else "", "insta": ig.group(1).rstrip(".") if ig else ""}
+
+
+def has_cyr(s):
+    return bool(re.search(r"[А-Яа-яІіЇїЄєҐґ]", str(s)))
+
+
+def pick_variants(template, c, n_plain=2):
+    """Назва міста тією ж мовою, що й шаблон: «українці {city}» → Валенсія, «украинцы {city}» → Валенсия,
+    «ukrainian {city}» → Valencia, просто «{city}» → перші n_plain варіантів."""
+    words = template.replace("{city}", "").strip()
+    cyr = [v for v in c["variants"] if has_cyr(v)]
+    lat = [v for v in c["variants"] if not has_cyr(v)]
+    if not words:
+        return c["variants"][:n_plain]
+    if not has_cyr(words):
+        return lat[:1] or cyr[:1]
+    if re.search(r"[іїєґІЇЄҐ]", words):
+        return cyr[:1]
+    return (cyr[1:2] or cyr[:1])
 
 
 def is_ukr(*texts):
@@ -233,15 +280,96 @@ class Outreach:
         qs = [x.strip() for x in str(cfg.get("queries") or "").splitlines() if "{city}" in x]
         jobs, seen = [], set()
         for c in cities:
-            for v in c["variants"][:2]:  # українська й російська назви; латиниця — лише для впізнавання
-                # Telegram шукає за початком слова: «Валенсі» знаходить і «Валенсія», і «Валенсії»
-                stem = v[:-1] if len(v) >= 6 and v[-1].lower() in "аяіїюеоуиыь" else v
-                for t in qs:
+            for t in qs:
+                for v in pick_variants(t, c):
+                    # Telegram шукає за початком слова: «Валенсі» знаходить і «Валенсія», і «Валенсії»
+                    stem = v[:-1] if len(v) >= 6 and v[-1].lower() in "аяіїюеоуиыь" else v
                     q = t.replace("{city}", v).strip()
                     if len(q) >= 3 and q.lower() not in seen:
                         seen.add(q.lower())
                         jobs.append({**c, "q": q, "q_tg": t.replace("{city}", stem).strip()})
         return jobs
+
+    def plan_tt(self, cfg):
+        """TikTok: кириличні шаблони — з українською/російською назвою міста, латинські — з латинською."""
+        cities = parse_cities(cfg.get("cities"))
+        qs = [x.strip() for x in str(cfg.get("tt_queries") or "").splitlines() if "{city}" in x]
+        jobs, seen = [], set()
+        for c in cities:
+            for t in qs:
+                for v in pick_variants(t, c, 1):
+                    q = t.replace("{city}", v).strip()
+                    if len(q) >= 3 and q.lower() not in seen:
+                        seen.add(q.lower())
+                        jobs.append({**c, "q": q})
+        return jobs
+
+    async def search_tiktok(self, token, q, per):
+        s = await self.http()
+        url = f"https://api.apify.com/v2/acts/{APIFY_ACTOR}/run-sync-get-dataset-items"
+        async with s.post(url, params={"token": token, "timeout": 240}, json={"searchQueries": [q], "maxProfilesPerQuery": per},
+                          timeout=aiohttp.ClientTimeout(total=280)) as r:
+            data = await r.json(content_type=None)
+            if r.status >= 400 or not isinstance(data, list):
+                err = (data or {}).get("error", {}) if isinstance(data, dict) else {}
+                raise RuntimeError(f"Apify: {err.get('message') or err.get('type') or r.status}")
+        out = []
+        for it in data:
+            a = it.get("authorMeta") if isinstance(it.get("authorMeta"), dict) else it
+            name = a.get("name") or a.get("uniqueId") or a.get("username") or ""
+            if not name or a.get("privateAccount"):
+                continue
+            link = a.get("bioLink")
+            link = (link.get("link") if isinstance(link, dict) else link) or ""
+            out.append({"username": str(name).lstrip("@"), "title": a.get("nickName") or a.get("nickname") or name,
+                        "about": a.get("signature") or a.get("bio") or "", "bio_link": str(link),
+                        "members": int(a.get("fans") or a.get("followerCount") or a.get("followers") or 0),
+                        "videos": int(a.get("video") or a.get("videoCount") or 0), "verified": bool(a.get("verified"))})
+        return out
+
+    async def run_tiktok(self, cfg, cities):
+        token = self.apify_token(cfg)
+        if not (token and cfg.get("tt_on", True)):
+            return 0, 0
+        jobs = self.plan_tt(cfg)
+        if not jobs:
+            return 0, 0
+        cur = int(cfg.get("tt_cursor") or 0) % len(jobs)
+        n = max(1, min(len(jobs), int(cfg.get("tt_max_queries") or 8)))
+        per = max(1, min(100, int(cfg.get("tt_per_query") or 20)))
+        min_f = int(cfg.get("tt_min") or 0)
+        self.log(f"TikTok: запросов {n} из {len(jobs)}, до {per} профилей на запрос (≈ ${n * per * 0.0025:.2f})")
+        found = new = 0
+        for i in range(n):
+            job = jobs[(cur + i) % len(jobs)]
+            try:
+                items = await self.search_tiktok(token, job["q"], per)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"tiktok: «{job['q']}» — {e}")
+                if str(e).startswith("Apify"):
+                    break  # токен/баланс — не продовжуємо
+                continue
+            k = 0
+            for it in items:
+                if it["members"] < min_f or not is_ukr(it["title"], it["about"]):
+                    continue
+                c = self.city_of(cities, f'{it["title"]} {it["about"]}', job)
+                item = {"id": "tt_" + slug(it["username"]), "platform": "tiktok", "username": it["username"], "title": it["title"][:200],
+                        "about": it["about"][:1500], "members": it["members"], "kind": "tiktok", "link": f"https://www.tiktok.com/@{it['username']}",
+                        "country": c["country"], "city": c["city"], "source": "tiktok", "query": job["q"], "videos": it["videos"],
+                        **bio_contacts(it["about"], it["bio_link"])}
+                if item["id"] == "tt_":
+                    continue
+                found += 1
+                k += 1
+                if await self.upsert(item):
+                    new += 1
+            self.log(f"tiktok: «{job['q']}» → {k}")
+        await self.save_cfg({"tt_cursor": (cur + n) % len(jobs)})
+        return found, new
+
+    def apify_token(self, cfg):
+        return os.getenv("APIFY_TOKEN", "").strip() or str(cfg.get("apify_token") or "").strip()
 
     def city_of(self, cities, text, fallback):
         """Если в названии/описании прямо назван город — берём его, иначе город из запроса."""
@@ -259,66 +387,28 @@ class Outreach:
         try:
             cfg = await self.cfg(fresh=True)
             jobs = self.plan(cfg)
-            if not jobs:
-                return self.log("Нет городов или запросов — проверьте настройки")
+            cities = parse_cities(cfg.get("cities"))
             token = self.tgstat_token(cfg)
             client = None
             try:
                 client = await self.tg_client()
             except Exception as e:  # noqa: BLE001
                 self.log(f"Telegram-аккаунт: {e}")
-            if not token and not client:
-                return self.log("Нет источника: добавьте токен TGStat или войдите в Telegram-аккаунт")
-            cur = int(cfg.get("cursor") or 0) % len(jobs)
-            n = max(1, min(len(jobs), int(cfg.get("max_queries") or 40)))
-            batch = [jobs[(cur + i) % len(jobs)] for i in range(n)]
-            cities = parse_cities(cfg.get("cities"))
-            min_m = int(cfg.get("min_members") or 0)
-            budget = {"full": 120}
-            self.log(f"Запросов: {n} из {len(jobs)} · источники: {', '.join(x for x, ok in (('TGStat', token), ('Telegram', client)) if ok)}")
-            for job in batch:
-                for src, fn in (("tgstat", (lambda q: self.search_tgstat(token, q)) if token else None),
-                                ("telegram", (lambda q: self.search_tg(client, job.get("q_tg") or q, budget)) if client else None)):
-                    if not fn:
-                        continue
-                    try:
-                        items = await fn(job["q"])
-                    except Exception as e:  # noqa: BLE001
-                        self.log(f"{src}: «{job['q']}» — {e}")
-                        if src == "tgstat" and str(e).startswith("TGStat"):
-                            token = ""  # токен/тариф не подходит — не тратим остальные запросы
-                        if src == "telegram" and "подождать" in str(e):
-                            client = None
-                        continue
-                    k = 0
-                    for it in items:
-                        if it["members"] < min_m or not (it["username"] or it.get("tgstat_id")):
-                            continue
-                        # лише українські: за назвою й описом самого каналу (не за словами запиту)
-                        if not is_ukr(it["title"], it["about"]):
-                            continue
-                        c = self.city_of(cities, f'{it["title"]} {it["about"]}', job)
-                        item = {"id": slug(it["username"], f"tgs{it.get('tgstat_id', '')}"), "username": it["username"], "title": it["title"][:200],
-                                "about": it["about"][:1500], "members": it["members"], "kind": it["kind"], "link": it["link"],
-                                "country": c["country"], "city": c["city"], "source": src, "contact": find_contact(it["about"], it["username"]),
-                                "query": job["q"]}
-                        if not item["id"]:
-                            continue
-                        found += 1
-                        k += 1
-                        if await self.upsert(item):
-                            new += 1
-                    self.log(f"{src}: «{job['q']}» → {k}")
-                    await asyncio.sleep(1.0 if src == "tgstat" else 2.5)
-                if not token and not client:
-                    self.log("Источники недоступны — остановлено")
-                    break
-            await self.save_cfg({"cursor": (cur + n) % len(jobs), "last_run": int(time.time()), "last_new": new})
+            tt_ok = bool(self.apify_token(cfg) and cfg.get("tt_on", True))
+            if not token and not client and not tt_ok:
+                return self.log("Нет источника: добавьте токен TGStat, войдите в Telegram-аккаунт или добавьте токен Apify для TikTok")
+            if (token or client) and jobs:
+                f2, n2 = await self.run_telegram(cfg, jobs, cities, token, client)
+                found, new = found + f2, new + n2
+            if tt_ok:
+                f2, n2 = await self.run_tiktok(cfg, cities)
+                found, new = found + f2, new + n2
+            await self.save_cfg({"last_run": int(time.time()), "last_new": new})
             self.log(f"Готово: найдено {found}, новых {new}")
             if new and cfg.get("notify") and not manual:
                 for aid in self.a.c.admin_ids():
                     try:
-                        await self.a.c.bot.send_message(aid, f"📣 Нашлось {new} новых украинских каналов/чатов для рекламы FlirtUA.\nАдминка → «📣 Блогеры».")
+                        await self.a.c.bot.send_message(aid, f"📣 Нашлось {new} новых украинских каналов и блогеров для рекламы FlirtUA.\nАдминка → «📣 Блогеры».")
                     except Exception:
                         pass
         except Exception as e:  # noqa: BLE001
@@ -326,6 +416,54 @@ class Outreach:
             self.log(f"Ошибка: {e}")
         finally:
             self.state.update(running=False, last={"ts": int(time.time()), "found": found, "new": new})
+
+    async def run_telegram(self, cfg, jobs, cities, token, client):
+        found = new = 0
+        cur = int(cfg.get("cursor") or 0) % len(jobs)
+        n = max(1, min(len(jobs), int(cfg.get("max_queries") or 40)))
+        batch = [jobs[(cur + i) % len(jobs)] for i in range(n)]
+        min_m = int(cfg.get("min_members") or 0)
+        budget = {"full": 120}
+        self.log(f"Запросов: {n} из {len(jobs)} · источники: {', '.join(x for x, ok in (('TGStat', token), ('Telegram', client)) if ok)}")
+        for job in batch:
+            for src, fn in (("tgstat", (lambda q: self.search_tgstat(token, q)) if token else None),
+                            ("telegram", (lambda q: self.search_tg(client, job.get("q_tg") or q, budget)) if client else None)):
+                if not fn:
+                    continue
+                try:
+                    items = await fn(job["q"])
+                except Exception as e:  # noqa: BLE001
+                    self.log(f"{src}: «{job['q']}» — {e}")
+                    if src == "tgstat" and str(e).startswith("TGStat"):
+                        token = ""  # токен/тариф не подходит — не тратим остальные запросы
+                    if src == "telegram" and "подождать" in str(e):
+                        client = None
+                    continue
+                k = 0
+                for it in items:
+                    if it["members"] < min_m or not (it["username"] or it.get("tgstat_id")):
+                        continue
+                    # лише українські: за назвою й описом самого каналу (не за словами запиту)
+                    if not is_ukr(it["title"], it["about"]):
+                        continue
+                    c = self.city_of(cities, f'{it["title"]} {it["about"]}', job)
+                    item = {"id": slug(it["username"], f"tgs{it.get('tgstat_id', '')}"), "platform": "telegram", "username": it["username"], "title": it["title"][:200],
+                            "about": it["about"][:1500], "members": it["members"], "kind": it["kind"], "link": it["link"],
+                            "country": c["country"], "city": c["city"], "source": src, "contact": find_contact(it["about"], it["username"]),
+                            "query": job["q"]}
+                    if not item["id"]:
+                        continue
+                    found += 1
+                    k += 1
+                    if await self.upsert(item):
+                        new += 1
+                self.log(f"{src}: «{job['q']}» → {k}")
+                await asyncio.sleep(1.0 if src == "tgstat" else 2.5)
+            if not token and not client:
+                self.log("Источники недоступны — остановлено")
+                break
+        await self.save_cfg({"cursor": (cur + n) % len(jobs)})
+        return found, new
 
     async def loop(self):
         await asyncio.sleep(120)
@@ -342,11 +480,12 @@ class Outreach:
     # ---------- сообщение ----------
     def message(self, cfg, it, bot):
         link = f"https://t.me/{bot}?startapp=ad_{it['id']}"
-        kind = "чат" if it.get("kind") == "chat" else "канал"
+        kind = {"chat": "чат", "tiktok": "TikTok"}.get(it.get("kind"), "канал")
         vals = {"title": it.get("title", ""), "city": it.get("city") or it.get("country", ""), "country": it.get("country", ""),
                 "members": f"{int(it.get('members') or 0):,}".replace(",", " "), "bot": bot, "link": link, "kind": kind,
                 "my_name": cfg.get("my_name") or "", "username": it.get("username", "")}
-        text = str(cfg.get("template") or DEFAULT_TEMPLATE)
+        tt = it.get("platform") == "tiktok"
+        text = str((cfg.get("tt_template") or DEFAULT_TT_TEMPLATE) if tt else (cfg.get("template") or DEFAULT_TEMPLATE))
         if not vals["my_name"]:  # ім'я не задано — «Мене звати {my_name}, я з команди» → «Я з команди»
             text = re.sub(r"Мене звати\s*\{my_name\}\s*,\s*я", "Я", text)
         for k, v in vals.items():
@@ -377,7 +516,8 @@ class Outreach:
         tg_ok = bool(sec.get("session") and api_id and api_hash)
         return web.json_response({
             "items": items, "statuses": STATUSES, "state": self.state, "bot": bot,
-            "cfg": {k: v for k, v in cfg.items() if k not in ("tgstat_token",)},
+            "cfg": {k: v for k, v in cfg.items() if k not in ("tgstat_token", "apify_token")},
+            "apify": bool(self.apify_token(cfg)), "apifyEnv": bool(os.getenv("APIFY_TOKEN", "").strip()),
             "tgstat": bool(self.tgstat_token(cfg)), "tgstatEnv": bool(os.getenv("TGSTAT_TOKEN", "").strip()),
             "tg": {"ok": tg_ok, "me": sec.get("me", ""), "waitingCode": bool(self._login), "keysEnv": bool(os.getenv("TG_API_ID") and os.getenv("TG_API_HASH")),
                    "apiId": str(sec.get("api_id") or "")},
@@ -399,6 +539,9 @@ class Outreach:
                 upd["sent_at"] = int(time.time())
         if "note" in b:
             upd["note"] = str(b["note"])[:1000]
+        for k in ("email", "insta"):
+            if k in b:
+                upd[k] = str(b[k]).strip().lstrip("@")[:120]
         if "contact" in b:
             upd["contact"] = re.sub(r"^(@|https?://t\.me/|t\.me/)", "", str(b["contact"]).strip())[:40]
             upd["contact_manual"] = True
@@ -438,21 +581,26 @@ class Outreach:
     async def api_settings(self, req):
         b = await req.json()
         upd = {}
-        for k in ("cities", "queries", "template", "my_name"):
+        for k in ("cities", "queries", "template", "my_name", "tt_queries", "tt_template"):
             if k in b:
                 upd[k] = str(b[k])[:20000]
         if "template" in upd and not upd["template"].strip():
             upd["template"] = DEFAULT_TEMPLATE
+        if "tt_template" in upd and not upd["tt_template"].strip():
+            upd["tt_template"] = DEFAULT_TT_TEMPLATE
         if "cities" in upd and not parse_cities(upd["cities"]):
             raise ValueError("Города: по строке на страну, «Країна: Місто1; Місто2/варіант»")
-        for k, lo, hi in (("min_members", 0, 10_000_000), ("every_hours", 1, 24 * 30), ("max_queries", 1, 500)):
+        for k, lo, hi in (("min_members", 0, 10_000_000), ("every_hours", 1, 24 * 30), ("max_queries", 1, 500),
+                          ("tt_min", 0, 100_000_000), ("tt_max_queries", 1, 200), ("tt_per_query", 1, 100)):
             if k in b:
                 upd[k] = max(lo, min(hi, int(b[k] or 0)))
-        for k in ("auto", "notify"):
+        for k in ("auto", "notify", "tt_on"):
             if k in b:
                 upd[k] = bool(b[k])
         if b.get("tgstat_token") is not None and str(b["tgstat_token"]).strip() != "•••":
             upd["tgstat_token"] = str(b["tgstat_token"]).strip()[:200]
+        if b.get("apify_token") is not None and str(b["apify_token"]).strip():
+            upd["apify_token"] = str(b["apify_token"]).strip()[:200]
         await self.save_cfg(upd)
         return web.json_response({"ok": True})
 

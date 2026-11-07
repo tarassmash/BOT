@@ -265,8 +265,8 @@ details.card[open] > summary { margin-bottom: 12px; }
     <section data-panel="ads" hidden>
       <div class="ads-top">
         <div class="card">
-          <h3>📣 Украинские каналы и чаты по городам</h3>
-          <p class="muted" style="margin:0;font-size:13.5px">Админка сама ищет большие украинские каналы и группы в ваших городах, находит контакт «по рекламе» и готовит личное предложение с персональной ссылкой. Вы жмёте «Написать» — открывается чат в Telegram с готовым текстом, отправляете сами (так аккаунт не заморозят за спам).</p>
+          <h3>📣 Украинские каналы, чаты и TikTok-блогеры по городам</h3>
+          <p class="muted" style="margin:0;font-size:13.5px">Админка сама ищет большие украинские Telegram-каналы, группы и TikTok-блогеров в ваших городах, находит контакт для рекламы и готовит личное предложение с персональной ссылкой. Вы жмёте «Написать» — открывается чат в Telegram или письмо с готовым текстом, отправляете сами (так аккаунт не заморозят за спам).</p>
           <div class="src" id="adsSrc"></div>
           <div class="actions" style="margin:6px 0"><button class="btn acc" id="adsRun" type="button">🔎 Искать сейчас</button><span class="muted" id="adsLast" style="align-self:center;font-size:13.5px"></span></div>
           <div class="log" id="adsLog" hidden></div>
@@ -278,10 +278,10 @@ details.card[open] > summary { margin-bottom: 12px; }
           <input id="adsQ" placeholder="Поиск по названию, @нику, городу">
           <select id="adsCountry"><option value="">Все страны</option></select>
           <select id="adsStatus"><option value="">Все статусы</option></select>
-          <select id="adsKind"><option value="">Каналы и чаты</option><option value="channel">Каналы</option><option value="chat">Чаты</option></select>
+          <select id="adsKind"><option value="">Telegram и TikTok</option><option value="channel">📢 Каналы</option><option value="chat">💬 Чаты</option><option value="tiktok">🎵 TikTok</option></select>
           <label style="display:flex;gap:6px;align-items:center;font-size:14px"><input type="checkbox" id="adsHasContact"> есть контакт</label>
         </div>
-        <div style="overflow:auto"><table><thead><tr><th>Канал / чат</th><th>Город</th><th class="num">Подписчики</th><th>Контакт</th><th>Статус</th><th class="num">Переходы / анкеты</th><th></th></tr></thead><tbody id="adsRows"></tbody></table></div>
+        <div style="overflow:auto"><table><thead><tr><th>Канал / чат / блогер</th><th>Город</th><th class="num">Подписчики</th><th>Контакт</th><th>Статус</th><th class="num">Переходы / анкеты</th><th></th></tr></thead><tbody id="adsRows"></tbody></table></div>
         <div class="pager" id="adsPager"></div>
       </div>
       <div class="card" style="margin-top:12px">
@@ -302,6 +302,15 @@ details.card[open] > summary { margin-bottom: 12px; }
             <div class="field"><label for="adsTgstat">Токен TGStat</label><input id="adsTgstat" placeholder="токен из tgstat.ru → API"><span class="hint" id="adsTgstatHint">Нужен тариф Stat API S или выше. Можно также задать TGSTAT_TOKEN в Railway → Variables.</span></div>
             <h3 style="margin-top:14px">Свой Telegram-аккаунт</h3>
             <div id="adsTg"></div>
+            <h3 style="margin-top:14px">🎵 TikTok (Apify)</h3>
+            <label style="display:flex;gap:8px;align-items:center;font-weight:600;margin-bottom:10px"><input type="checkbox" id="adsTtOn"> Искать TikTok-блогеров</label>
+            <div class="field"><label for="adsApify">Токен Apify</label><input id="adsApify" placeholder="apify_api_…"><span class="hint">apify.com → Settings → API &amp; Integrations. Около $2,5 за 1000 профилей, на бесплатном тарифе $5 в месяц. Можно также задать APIFY_TOKEN в Railway.</span></div>
+            <div class="row">
+              <div class="field" style="flex:0 1 150px"><label for="adsTtMaxQ">Запросов за раз</label><input id="adsTtMaxQ" type="number" min="1" max="200"></div>
+              <div class="field" style="flex:0 1 150px"><label for="adsTtPer">Профилей на запрос</label><input id="adsTtPer" type="number" min="1" max="100"></div>
+              <div class="field" style="flex:0 1 160px"><label for="adsTtMin">Мин. подписчиков</label><input id="adsTtMin" type="number" min="0"></div>
+            </div>
+            <span class="hint" id="adsTtCost" style="font-size:12.5px;color:var(--muted)"></span>
           </div>
           <div>
             <div class="row">
@@ -318,9 +327,11 @@ details.card[open] > summary { margin-bottom: 12px; }
         </div>
         <div class="field"><label for="adsTpl">Текст предложения</label><textarea id="adsTpl" style="min-height:190px"></textarea>
           <span class="hint ph-hint">Подставляется: <code>{title}</code> название, <code>{city}</code> город, <code>{country}</code>, <code>{members}</code> подписчики, <code>{link}</code> персональная ссылка (по ней видно переходы и анкеты), <code>{bot}</code>, <code>{kind}</code> канал/чат, <code>{my_name}</code>.</span></div>
+        <div class="field"><label for="adsTtTpl">Текст предложения для TikTok-блогеров</label><textarea id="adsTtTpl" style="min-height:170px"></textarea></div>
         <div class="grid2" style="margin-top:0">
           <div class="field"><label for="adsCities">Города</label><textarea id="adsCities" style="min-height:170px"></textarea><span class="hint">Строка на страну: «Країна: Місто; Місто2/Город2/Latin». Первые два варианта — для поиска, все — для определения города.</span></div>
-          <div class="field"><label for="adsQueries">Шаблоны запросов</label><textarea id="adsQueries" style="min-height:170px"></textarea><span class="hint">По строке, обязательно с <code>{city}</code>.</span></div>
+          <div><div class="field"><label for="adsQueries">Запросы Telegram</label><textarea id="adsQueries" style="min-height:80px"></textarea></div>
+            <div class="field"><label for="adsTtQueries">Запросы TikTok</label><textarea id="adsTtQueries" style="min-height:80px"></textarea><span class="hint">По строке, обязательно с <code>{city}</code>. Город подставляется на языке запроса: «українці {city}» → Валенсія, «украинцы {city}» → Валенсия, «ukrainian {city}» → Valencia.</span></div></div>
         </div>
         <div class="actions"><button class="btn acc" id="adsSave" type="button">Сохранить настройки</button></div>
       </details>
@@ -886,12 +897,12 @@ details.card[open] > summary { margin-bottom: 12px; }
     $("adsStatus").value = sel;
     const cs = [...new Set(ADS.items.map(x => x.country).filter(Boolean))], cSel = $("adsCountry").value;
     $("adsCountry").innerHTML = `<option value="">Все страны</option>` + cs.map(x => `<option>${esc(x)}</option>`).join(""); $("adsCountry").value = cSel;
-    $("adsSrc").innerHTML = `<span class="${ADS.tgstat ? "on" : ""}">${ADS.tgstat ? "✓" : "✗"} TGStat</span><span class="${ADS.tg.ok ? "on" : ""}">${ADS.tg.ok ? "✓" : "✗"} Telegram-аккаунт${ADS.tg.ok && ADS.tg.me ? " · " + esc(ADS.tg.me) : ""}</span><span class="${c.auto ? "on" : ""}">${c.auto ? `⏱ авто каждые ${c.every_hours} ч` : "авто выкл."}</span>`;
+    $("adsSrc").innerHTML = `<span class="${ADS.tgstat ? "on" : ""}">${ADS.tgstat ? "✓" : "✗"} TGStat</span><span class="${ADS.tg.ok ? "on" : ""}">${ADS.tg.ok ? "✓" : "✗"} Telegram-аккаунт${ADS.tg.ok && ADS.tg.me ? " · " + esc(ADS.tg.me) : ""}</span><span class="${ADS.apify && c.tt_on !== false ? "on" : ""}">${ADS.apify && c.tt_on !== false ? "✓" : "✗"} TikTok (Apify)</span><span class="${c.auto ? "on" : ""}">${c.auto ? `⏱ авто каждые ${c.every_hours} ч` : "авто выкл."}</span>`;
     $("adsLast").textContent = c.last_run ? `Последний поиск: ${agoS(c.last_run)}, новых ${c.last_new ?? 0}` : "Поиска ещё не было";
     const it = ADS.items, cnt = st => it.filter(x => x.status === st).length;
     const k = (l, v, sub) => `<div class="card kpi"><div class="l">${l}</div><div class="v">${v}</div>${sub ? `<div class="s">${sub}</div>` : ""}</div>`;
     $("adsKpis").innerHTML = [
-      k("Найдено", num(it.length), `с контактом ${num(it.filter(x => x.contact).length)}`),
+      k("Найдено", num(it.length), `TikTok ${num(it.filter(x => x.platform === "tiktok").length)} · с контактом ${num(it.filter(x => x.contact || x.email).length)}`),
       k("Новые", num(cnt("new")), "ещё не писали"),
       k("Написали", num(cnt("sent") + cnt("replied")), `ответили ${num(cnt("replied"))}`),
       k("Договорились", num(cnt("deal") + cnt("posted")), `вышла реклама ${num(cnt("posted"))}`),
@@ -904,22 +915,22 @@ details.card[open] > summary { margin-bottom: 12px; }
   }
   function adsFiltered() {
     const q = $("adsQ").value.trim().toLowerCase(), co = $("adsCountry").value, st = $("adsStatus").value, kd = $("adsKind").value, hc = $("adsHasContact").checked;
-    return (ADS?.items || []).filter(x => (!co || x.country === co) && (!st || x.status === st) && (!kd || x.kind === kd) && (!hc || x.contact)
-      && (!q || [x.title, x.username, x.city, x.country, x.contact].join(" ").toLowerCase().includes(q)));
+    return (ADS?.items || []).filter(x => (!co || x.country === co) && (!st || x.status === st) && (!kd || x.kind === kd) && (!hc || x.contact || x.email)
+      && (!q || [x.title, x.username, x.city, x.country, x.contact, x.email, x.insta].join(" ").toLowerCase().includes(q)));
   }
   function renderAds() {
     const all = adsFiltered(), pages = Math.max(1, Math.ceil(all.length / ADS_PER));
     adsPage = Math.min(adsPage, pages - 1);
     const rows = all.slice(adsPage * ADS_PER, (adsPage + 1) * ADS_PER);
     $("adsRows").innerHTML = rows.length ? rows.map(x => `<tr class="ads-row" data-id="${esc(x.id)}">
-      <td class="t"><b title="${esc(x.title)}">${x.kind === "chat" ? "💬" : "📢"} ${esc(x.title || x.username)}</b><span>${x.username ? `<a href="https://t.me/${esc(x.username)}" target="_blank" rel="noopener">@${esc(x.username)}</a>` : ""} · ${esc((x.sources || []).join(", "))}</span></td>
+      <td class="t"><b title="${esc(x.title)}">${adsIcon(x)} ${esc(x.title || x.username)}</b><span>${x.username ? `<a href="${esc(adsUrl(x))}" target="_blank" rel="noopener">@${esc(x.username)}</a>` : ""} · ${esc((x.sources || []).join(", "))}</span></td>
       <td>${esc(x.city || "—")}<br><span class="muted" style="font-size:12.5px">${esc(x.country || "")}</span></td>
       <td class="num"><b>${num(x.members)}</b></td>
-      <td>${x.contact ? `<a href="https://t.me/${esc(x.contact)}" target="_blank" rel="noopener">@${esc(x.contact)}</a>` : `<span class="muted">нет</span>`}</td>
+      <td>${adsContacts(x)}</td>
       <td><select data-st class="st-${esc(x.status)}">${Object.entries(ADS.statuses).map(([k, v]) => `<option value="${k}" ${x.status === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>${x.sent_at ? `<br><span class="muted" style="font-size:12px">написали ${agoS(x.sent_at)}</span>` : ""}</td>
       <td class="num">${num(x.opens || 0)} / <b>${num(x.regs || 0)}</b></td>
       <td><button class="btn sm${x.status === "new" ? " acc" : ""}" data-w type="button">✍️ Написать</button></td></tr>`).join("")
-      : `<tr><td colspan="7" class="empty">${ADS?.items?.length ? "Ничего не подходит под фильтры" : "Пока пусто. Подключите TGStat или Telegram-аккаунт в настройках ниже и нажмите «Искать сейчас»."}</td></tr>`;
+      : `<tr><td colspan="7" class="empty">${ADS?.items?.length ? "Ничего не подходит под фильтры" : "Пока пусто. Подключите TGStat, Telegram-аккаунт или Apify (TikTok) в настройках ниже и нажмите «Искать сейчас»."}</td></tr>`;
     $("adsPager").innerHTML = pages > 1 ? `<button class="btn sm" id="adsPrev" ${adsPage ? "" : "disabled"}>←</button> ${adsPage + 1} / ${pages} · ${num(all.length)} <button class="btn sm" id="adsNext" ${adsPage < pages - 1 ? "" : "disabled"}>→</button>` : (all.length ? `${num(all.length)}` : "");
     if ($("adsPrev")) $("adsPrev").onclick = () => { adsPage--; renderAds(); };
     if ($("adsNext")) $("adsNext").onclick = () => { adsPage++; renderAds(); };
@@ -929,14 +940,25 @@ details.card[open] > summary { margin-bottom: 12px; }
       tr.querySelector("[data-w]").onclick = () => adsWrite(x);
     });
   }
+  const adsIcon = x => x.platform === "tiktok" ? "🎵" : x.kind === "chat" ? "💬" : "📢";
+  const adsUrl = x => x.platform === "tiktok" ? (x.link || `https://www.tiktok.com/@${x.username}`) : `https://t.me/${x.username}`;
+  function adsContacts(x) {
+    const out = [];
+    if (x.contact) out.push(`<a href="https://t.me/${esc(x.contact)}" target="_blank" rel="noopener">@${esc(x.contact)}</a>`);
+    if (x.email) out.push(`<a href="mailto:${esc(x.email)}">✉️ ${esc(x.email)}</a>`);
+    if (x.insta) out.push(`<a href="https://instagram.com/${esc(x.insta)}" target="_blank" rel="noopener">IG ${esc(x.insta)}</a>`);
+    return out.length ? out.join("<br>") : `<span class="muted">нет</span>`;
+  }
   async function adsSet(x, body) { await api("/admin/api/outreach/item/" + encodeURIComponent(x.id), body); Object.assign(x, body, body.status === "sent" ? { sent_at: Date.now() / 1000 } : {}); }
   function adsWrite(x) {
-    $("adsBox").innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div><h3 style="margin:0">${x.kind === "chat" ? "💬" : "📢"} ${esc(x.title || x.username)}</h3>
-      <span class="muted" style="font-size:13.5px">${x.username ? `<a href="https://t.me/${esc(x.username)}" target="_blank" rel="noopener">@${esc(x.username)}</a> · ` : ""}${num(x.members)} подписчиков · ${esc([x.city, x.country].filter(Boolean).join(", "))}</span></div><button class="btn sm" id="awX">✕</button></div>
+    const TT = x.platform === "tiktok";
+    $("adsBox").innerHTML = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:start"><div><h3 style="margin:0">${adsIcon(x)} ${esc(x.title || x.username)}</h3>
+      <span class="muted" style="font-size:13.5px">${x.username ? `<a href="${esc(adsUrl(x))}" target="_blank" rel="noopener">@${esc(x.username)}</a> · ` : ""}${TT && x.videos ? `${num(x.videos)} видео · ` : ""}${num(x.members)} подписчиков · ${esc([x.city, x.country].filter(Boolean).join(", "))}</span></div><button class="btn sm" id="awX">✕</button></div>
       <div class="detail" style="margin-top:12px;grid-template-columns:1fr 1.2fr">
         <div>
-          <div class="field"><label>Описание канала</label><div class="about" style="max-height:220px;overflow:auto;font-size:13.5px">${esc(x.about || "—")}</div></div>
-          <div class="field"><label for="awC">Кому писать (контакт по рекламе)</label><input id="awC" value="${esc(x.contact || "")}" placeholder="@admin — найдите в описании или закрепе канала"></div>
+          <div class="field"><label>${TT ? "Описание профиля" : "Описание канала"}</label><div class="about" style="max-height:220px;overflow:auto;font-size:13.5px">${esc(x.about || "—")}</div></div>
+          <div class="field"><label for="awC">${TT ? "Telegram блогера" : "Кому писать (контакт по рекламе)"}</label><input id="awC" value="${esc(x.contact || "")}" placeholder="${TT ? "@ник в Telegram, если указан" : "@admin — найдите в описании или закрепе канала"}"></div>
+          ${TT ? `<div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="field"><label for="awE">Почта</label><input id="awE" value="${esc(x.email || "")}" placeholder="email"></div><div class="field"><label for="awI">Instagram</label><input id="awI" value="${esc(x.insta || "")}" placeholder="ник"></div></div>` : ""}
           <div class="field"><label>Персональная ссылка</label><input readonly value="${esc(x.ref)}" onclick="this.select()"><span class="hint">Переходы: ${num(x.opens || 0)} · анкет создано: ${num(x.regs || 0)}</span></div>
           <div class="field"><label for="awN">Заметка</label><textarea id="awN" style="min-height:70px" placeholder="Цена, даты, договорённости…">${esc(x.note || "")}</textarea></div>
         </div>
@@ -944,14 +966,18 @@ details.card[open] > summary { margin-bottom: 12px; }
           <div class="field"><label for="awT">Сообщение</label><textarea id="awT" style="min-height:300px">${esc(x.text)}</textarea><span class="hint">Можно поправить перед отправкой. Шаблон меняется в настройках ниже.</span></div>
         </div>
       </div>
-      <div class="actions"><button class="btn acc" id="awOpen">✈️ Открыть чат в Telegram с этим текстом</button><button class="btn" id="awCopy">📋 Копировать текст</button><button class="btn" id="awSave">Сохранить контакт и заметку</button>
-        ${x.username && !x.contact ? `<a class="btn" href="https://t.me/${esc(x.username)}" target="_blank" rel="noopener">Открыть канал — найти контакт</a>` : ""}</div>
-      <p class="muted" style="font-size:13px;margin:0">После «Открыть чат» статус станет «Написали». Пишите по одному, с паузами — так Telegram не посчитает это спамом.</p>`;
+      <div class="actions"><button class="btn${TT && !x.contact ? "" : " acc"}" id="awOpen">✈️ Открыть чат в Telegram с этим текстом</button>
+        ${TT ? `<button class="btn${!x.contact && x.email ? " acc" : ""}" id="awMail">✉️ Письмо с этим текстом</button><button class="btn${!x.contact && !x.email ? " acc" : ""}" id="awTt">🎵 Копировать и открыть TikTok</button>` : ""}
+        <button class="btn" id="awCopy">📋 Копировать текст</button><button class="btn" id="awSave">Сохранить контакты и заметку</button>
+        ${!TT && x.username && !x.contact ? `<a class="btn" href="https://t.me/${esc(x.username)}" target="_blank" rel="noopener">Открыть канал — найти контакт</a>` : ""}</div>
+      <p class="muted" style="font-size:13px;margin:0">${TT ? "TikTok не даёт открыть сообщения с готовым текстом: «Копировать и открыть TikTok» копирует текст — вставьте его в сообщения блогеру. " : ""}После отправки статус станет «Написали». Пишите по одному, с паузами — так не посчитают спамом.</p>`;
     $("adsModal").hidden = false;
     const close = () => { $("adsModal").hidden = true; renderAds(); };
     $("awX").onclick = close; $("adsModal").onclick = e => { if (e.target.id === "adsModal") close(); };
     const saveMeta = async () => {
       const body = { note: $("awN").value };
+      if ($("awE") && $("awE").value.trim() !== (x.email || "")) body.email = $("awE").value.trim();
+      if ($("awI") && $("awI").value.trim().replace(/^@/, "") !== (x.insta || "")) body.insta = $("awI").value.trim().replace(/^@/, "");
       if ($("awC").value.trim().replace(/^@/, "") !== (x.contact || "")) body.contact = $("awC").value.trim().replace(/^@|^https?:\/\/t\.me\//, "");
       await adsSet(x, body);
     };
@@ -961,7 +987,19 @@ details.card[open] > summary { margin-bottom: 12px; }
       const to = $("awC").value.trim().replace(/^@|^https?:\/\/t\.me\//, "");
       if (!/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(to)) { toast("Укажите контакт: @username админа канала", true); $("awC").focus(); return; }
       window.open(`https://t.me/${to}?text=${encodeURIComponent($("awT").value)}`, "_blank", "noopener");
-      try { await saveMeta(); if (x.status === "new") await adsSet(x, { status: "sent" }); } catch (e) { toast(e.message, true); }
+      await markSent();
+    };
+    const markSent = async () => { try { await saveMeta(); if (x.status === "new") await adsSet(x, { status: "sent" }); } catch (e) { toast(e.message, true); } };
+    if ($("awMail")) $("awMail").onclick = async () => {
+      const em = $("awE").value.trim();
+      if (!/^\S+@\S+\.\S+$/.test(em)) { toast("Укажите почту блогера", true); $("awE").focus(); return; }
+      location.href = `mailto:${em}?subject=${encodeURIComponent("Реклама FlirtUA — співпраця")}&body=${encodeURIComponent($("awT").value)}`;
+      await markSent();
+    };
+    if ($("awTt")) $("awTt").onclick = async () => {
+      try { await navigator.clipboard.writeText($("awT").value); toast("Текст скопирован — вставьте в сообщения TikTok"); } catch { $("awT").select(); }
+      window.open(adsUrl(x), "_blank", "noopener");
+      await markSent();
     };
   }
   function adsState(st) {
@@ -979,17 +1017,25 @@ details.card[open] > summary { margin-bottom: 12px; }
   let adsSetFilled = false;
   function fillAdsSettings() {
     const c = ADS.cfg;
+    $("adsApify").placeholder = ADS.apifyEnv ? "задан в Railway (APIFY_TOKEN)" : (ADS.apify ? "••• сохранён — введите новый, чтобы заменить" : "apify_api_…");
     $("adsTgstat").placeholder = ADS.tgstatEnv ? "задан в Railway (TGSTAT_TOKEN)" : (ADS.tgstat ? "••• сохранён — введите новый, чтобы заменить" : "токен из tgstat.ru → API");
     renderTg();
     if (adsSetFilled) return; adsSetFilled = true;
     $("adsAuto").checked = !!c.auto; $("adsNotify").checked = c.notify !== false; $("adsEvery").value = c.every_hours; $("adsMaxQ").value = c.max_queries; $("adsMin").value = c.min_members;
     $("adsName").value = c.my_name || ""; $("adsTpl").value = c.template || ""; $("adsCities").value = c.cities || ""; $("adsQueries").value = c.queries || "";
+    $("adsTtOn").checked = c.tt_on !== false; $("adsTtMaxQ").value = c.tt_max_queries; $("adsTtPer").value = c.tt_per_query; $("adsTtMin").value = c.tt_min;
+    $("adsTtTpl").value = c.tt_template || ""; $("adsTtQueries").value = c.tt_queries || "";
+    const cost = () => { const n = (+$("adsTtMaxQ").value || 0) * (+$("adsTtPer").value || 0); $("adsTtCost").textContent = `До ${n} профилей за поиск ≈ $${(n * 0.0025).toFixed(2)}; при поиске каждые ${+$("adsEvery").value || 24} ч ≈ $${(n * 0.0025 * 720 / (+$("adsEvery").value || 24)).toFixed(0)} в месяц.`; };
+    ["adsTtMaxQ", "adsTtPer", "adsEvery"].forEach(i => $(i).oninput = cost); cost();
   }
   $("adsSave").onclick = async () => {
     const body = { auto: $("adsAuto").checked, notify: $("adsNotify").checked, every_hours: +$("adsEvery").value || 24, max_queries: +$("adsMaxQ").value || 40, min_members: +$("adsMin").value || 0,
-      my_name: $("adsName").value, template: $("adsTpl").value, cities: $("adsCities").value, queries: $("adsQueries").value };
+      my_name: $("adsName").value, template: $("adsTpl").value, cities: $("adsCities").value, queries: $("adsQueries").value,
+      tt_on: $("adsTtOn").checked, tt_max_queries: +$("adsTtMaxQ").value || 8, tt_per_query: +$("adsTtPer").value || 20, tt_min: +$("adsTtMin").value || 0,
+      tt_template: $("adsTtTpl").value, tt_queries: $("adsTtQueries").value };
+    if ($("adsApify").value.trim()) body.apify_token = $("adsApify").value.trim();
     if ($("adsTgstat").value.trim()) body.tgstat_token = $("adsTgstat").value.trim();
-    try { await api("/admin/api/outreach/settings", body); $("adsTgstat").value = ""; toast("Настройки сохранены"); adsSetFilled = false; loadAds(); } catch (e) { toast(e.message, true); }
+    try { await api("/admin/api/outreach/settings", body); $("adsTgstat").value = ""; $("adsApify").value = ""; toast("Настройки сохранены"); adsSetFilled = false; loadAds(); } catch (e) { toast(e.message, true); }
   };
   function renderTg() {
     const t = ADS.tg, box = $("adsTg");
