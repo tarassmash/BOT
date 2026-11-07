@@ -109,6 +109,9 @@ class MiniApp:
         claimed = await self.home_claimed(uid)
         common["homeBonus"] = {**hb, "on": hb["on"] and bool(hb["days"] or hb["hours"]), "claimed": claimed}
         if not p:
+            sp = str(req.get("tg_data", {}).get("start_param", ""))
+            if sp.startswith("ad_"):
+                asyncio.create_task(self.ad_visit(uid, sp[3:]))
             return web.json_response({"registered": False, **common})
         likes = len(list(await asyncio.to_thread(lambda: c.user_ref(uid).collection("likes").limit(99).get())))
         f = p.get("search_filters") or {}
@@ -131,6 +134,18 @@ class MiniApp:
             "ref": ref_link(bot_name, uid),
             "supportUnread": await self.support_unread(uid),
         })
+
+    async def ad_visit(self, uid, src):
+        """Перший вхід за посиланням блогера: +1 до «переходів» цього каналу (один раз на людину)."""
+        src = re.sub(r"[^a-z0-9_]", "", str(src).lower())[:40]
+        if not src:
+            return
+        c = self.c
+        try:
+            await asyncio.to_thread(c.db.collection("ad_visits").document(uid).create, {"src": src, "ts": int(time.time())})
+            await asyncio.to_thread(c.db.collection("outreach").document(src).update, {"opens": c.firestore.Increment(1)})
+        except Exception:
+            pass  # уже заходив або каналу немає в списку
 
     async def home_claimed(self, uid):
         try:
@@ -396,6 +411,8 @@ class MiniApp:
             "search_filters": {"country": None, "min_age": None, "max_age": None},
             "lat": fields.get("lat"), "lon": fields.get("lon"), "referred_by": referrer, "disclaimer_seen": True, "source": "app",
         }
+        if sp.startswith("ad_"):
+            profile["ad_source"] = re.sub(r"[^a-z0-9_]", "", sp[3:].lower())[:40]  # прийшов за посиланням блогера
         if referrer:
             profile["likes_view_until"] = now + c.premium_minutes() * 60
         paid = await c.paid_premium_until(uid)  # оплачений Преміум повертається в нову анкету

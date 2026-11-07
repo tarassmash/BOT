@@ -757,6 +757,9 @@ class Admin:
         r.add_get("/admin/photo/{fid}", self.photo)
         from design import DesignTool  # дизайн застосунку й картинки екранів (fal.ai)
         DesignTool(self).setup(r)
+        from outreach import Outreach  # поиск блогеров/каналов для рекламы
+        self.outreach = Outreach(self)
+        self.outreach.setup(r)
         return app
 
 
@@ -773,5 +776,6 @@ async def start_admin(ctx: Ctx, extra=None):
     await runner.setup()
     port = int(os.getenv("PORT", "8080"))
     await web.TCPSite(runner, "0.0.0.0", port).start()
+    asyncio.create_task(adm.outreach.loop())
     logging.info(f"🛠 Админка: порт {port}, путь /admin" + ("" if adm.password else " (ADMIN_PASSWORD не задан — вход закрыт)"))
     return adm
