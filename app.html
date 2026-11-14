@@ -1220,8 +1220,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       <div class="sec">Запроси друзів</div>
       <p style="margin:4px 2px">🎁 Коли друг створить анкету за твоїм посиланням, ви <b>обоє</b> отримаєте ${ME.premiumMinutes} хв Преміуму — побачите, хто вас лайкнув.</p>
       <p class="muted" style="margin:4px 2px">Ти вже запросив(-ла): <b>${ME.invited}</b></p>
-      <div class="two"><button class="btn primary" id="share">📤 Надіслати другу</button><button class="btn" id="copy">🔗 Копіювати</button></div>
-      <button class="btn" id="pSettings" style="margin-top:22px">⚙️ Преміум, підтримка, правила</button>`;
+      <div class="two"><button class="btn primary" id="share">📤 Надіслати другу</button><button class="btn" id="copy">🔗 Копіювати</button></div>`;
     const media = (m.mediaRaw || []).map(x => ({ ...x }));
     const onMedia = async items => {
       try { const r = await api("media", { media: items.map(x => ({ t: x.t, id: x.id, tok: x.tok, thumb: x.thumb })) }); m.mediaRaw = r.media; ok("success"); toast("✅ Фото збережено"); }
@@ -1247,7 +1246,6 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     };
     $("share").onclick = () => tg.openTelegramLink(share);
     $("copy").onclick = async () => { try { await navigator.clipboard.writeText(ME.ref); toast("🔗 Посилання скопійовано"); } catch { sheet(`<h2>Твоє посилання</h2><input value="${esc(ME.ref)}" readonly onclick="this.select()">`); } };
-    $("pSettings").onclick = openSettings;
   }
 
   // ---------- налаштування (⚙️ вгорі справа): преміум, підтримка, 20 причин, правила, видалення ----------
