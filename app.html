@@ -49,6 +49,12 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 .x-close { width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center; background: color-mix(in srgb, var(--linen) 10%, transparent); color: var(--linen); }
 .x-close svg { width: 18px; height: 18px; }
 .x-close:active { transform: scale(.92); }
+.gear { width: 36px; height: 36px; border-radius: 50%; flex: none; display: grid; place-items: center; background: color-mix(in srgb, var(--linen) 10%, transparent); color: var(--linen); position: relative; }
+.gear svg { width: 20px; height: 20px; }
+.gear:active { transform: scale(.92) rotate(30deg); }
+.gear .gdot { position: absolute; top: 3px; right: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--red); border: 2px solid var(--night); }
+.set-h { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 12px; }
+.set-h h2 { margin: 0; }
 
 /* вишиванка: смуга хрестикового орнаменту */
 .orn { height: 14px; background: var(--stitch) repeat-x center / auto 14px; flex: none; }
@@ -375,7 +381,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
 </style>
 </head>
 <body>
-  <header class="top" id="top" hidden><div class="brand"><i aria-hidden="true"></i><span>Flirt<b>UA</b></span></div><div class="here" id="here"></div><button class="x-close" data-close aria-label="Закрити застосунок"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <header class="top" id="top" hidden><div class="brand"><i aria-hidden="true"></i><span>Flirt<b>UA</b></span></div><div class="here" id="here"></div><button class="gear" id="gear" aria-label="Налаштування"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><i class="gdot" id="gearDot" hidden></i></button><button class="x-close" data-close aria-label="Закрити застосунок"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
   <section class="view on" id="feed">
     <div class="stage" id="stage"><div class="empty"><div class="loader"></div></div></div>
     <div class="actions" id="actions" hidden>
@@ -511,7 +517,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     $("tabs").hidden = false; showTop();
     setDot(ME.likes);
     const start = (location.hash || "").slice(1);
-    if (start === "support") { go("profile"); openSupport(); }
+    if (start === "support") { loadNext(); openSupport(); }
     else if (["likes", "matches", "profile"].includes(start)) go(start); else loadNext();
     homeAfterBoot();
   }
@@ -519,7 +525,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   const flag = (country, cls = "") => FLAGS[country] ? `<i class="flag ${FLAGS[country]} ${cls}" aria-hidden="true"></i>` : "";
   const WANT = { date: [["f", "👩 Дівчину"], ["m", "👱‍♂️ Хлопця"]], friends: [["m", "👱‍♂️ Друга"], ["f", "👩 Подругу"]] };
   const isFriends = () => ME?.me?.goal === "friends";
-  function showTop() { $("top").hidden = false; $("here").innerHTML = (flag(ME.me?.country) || "📍") + " " + esc(ME.me?.city || ME.me?.country || "Поруч"); }
+  function showTop() { $("top").hidden = false; $("gearDot").hidden = !ME?.supportUnread; $("here").innerHTML = (flag(ME.me?.country) || "📍") + " " + esc(ME.me?.city || ME.me?.country || "Поруч"); }
 
   // ---------- привітання для нових: з першої секунди видно, що це для наших за кордоном ----------
   // ---------- онбординг: з першої секунди видно, що це для наших за кордоном ----------
@@ -677,7 +683,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
         : `<p class="muted" style="text-align:center;margin:10px 0">Тут буде ваша переписка з підтримкою.</p>`;
       log.scrollTop = log.scrollHeight;
     };
-    const load = async () => { try { draw((await api("support")).messages); if (ME) ME.supportUnread = 0; const b = document.querySelector("#support .badge-n"); b && b.remove(); } catch (e) { $("supLog") && ($("supLog").innerHTML = `<p class="muted">${esc(e.message)}</p>`); } };
+    const load = async () => { try { draw((await api("support")).messages); if (ME) ME.supportUnread = 0; document.querySelectorAll("#sSupport .badge-n").forEach(b => b.remove()); $("gearDot").hidden = true; } catch (e) { $("supLog") && ($("supLog").innerHTML = `<p class="muted">${esc(e.message)}</p>`); } };
     await load();
     clearInterval(supTimer);
     supTimer = setInterval(() => { if (!$("supLog") || !$("sheetBg").classList.contains("on")) return clearInterval(supTimer); load(); }, 15000);
@@ -1187,18 +1193,12 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
   function renderProfile() {
     const m = ME.me, f = ME.filters, box = $("profileBox");
     const free = m.freeUntil * 1000 > Date.now();
-    const prem = m.premiumUntil * 1000 > Date.now();
     const opt = (v, cur, label) => `<option value="${esc(v)}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${esc(label ?? v)}</option>`;
     const share = `https://t.me/share/url?url=${encodeURIComponent(ME.ref)}&text=${encodeURIComponent("Знайомства для українців за кордоном ❤️ Спробуй — тут багато наших поруч!")}`;
     const ph = (m.mediaRaw || [])[0]?.url || m.media?.[0]?.url || "";
     box.innerHTML = `
       <div class="me-head">${ph ? `<img src="${ph}" alt="">` : ""}<div><b>${esc(m.name)}, ${esc(m.age)}</b><span class="muted">${esc(m.hometown ? m.hometown + " → " : "")}${esc(m.city || m.country)}</span></div></div>
-      <div class="prem">
-        <h2 style="font-size:19px">${prem ? "💎 Преміум активний" : "💎 Преміум"}</h2>
-        <p class="muted" style="margin:0">${prem ? `${untilText(m.premiumUntil)}. Бачиш усіх, хто тебе лайкнув. Можна продовжити — дні додадуться.` : "Побач усіх, кому ти сподобався(-лась), і відповідай взаємністю. Оплата зірками Telegram — не виходячи з застосунку."}</p>
-        <div id="pPlans">${plansHtml() || `<p class="muted" style="margin:10px 0 0">Оплата тимчасово недоступна — запроси друга, щоб отримати Преміум.</p>`}</div>
-      </div>
-      <div class="sec">Фото</div>
+      <div class="sec" style="margin-top:6px">Фото</div>
       <div id="pMedia"></div>
       <div class="sec">Про тебе</div>
       <div class="two"><div class="field"><label>Ім'я</label><input id="pName" maxlength="30" value="${esc(m.name)}"></div><div class="field"><label>Вік</label><input id="pAge" type="number" inputmode="numeric" min="18" max="70" value="${esc(m.age)}"></div></div>
@@ -1221,12 +1221,7 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
       <p style="margin:4px 2px">🎁 Коли друг створить анкету за твоїм посиланням, ви <b>обоє</b> отримаєте ${ME.premiumMinutes} хв Преміуму — побачите, хто вас лайкнув.</p>
       <p class="muted" style="margin:4px 2px">Ти вже запросив(-ла): <b>${ME.invited}</b></p>
       <div class="two"><button class="btn primary" id="share">📤 Надіслати другу</button><button class="btn" id="copy">🔗 Копіювати</button></div>
-      <div class="sec">Ще</div>
-      ${canHome() && (bonusOpen() || !m.homeAdded) ? `<button class="btn${bonusOpen() ? " primary" : ""}" id="homeBtn">📲 Додати на головний екран${bonusOpen() ? `<span class="badge-gift">🎁 бонус</span>` : ""}</button>` : ""}
-      <button class="btn" id="support">💬 Підтримка${ME.supportUnread ? `<span class="badge-n">${ME.supportUnread}</span>` : ""}</button>
-      <button class="btn" id="why">✨ Чому FlirtUA — 20 причин</button>
-      <button class="btn" id="rules">📜 Правила і безпека</button>
-      <button class="btn danger" id="del">🗑 Видалити анкету</button>`;
+      <button class="btn" id="pSettings" style="margin-top:22px">⚙️ Преміум, підтримка, правила</button>`;
     const media = (m.mediaRaw || []).map(x => ({ ...x }));
     const onMedia = async items => {
       try { const r = await api("media", { media: items.map(x => ({ t: x.t, id: x.id, tok: x.tok, thumb: x.thumb })) }); m.mediaRaw = r.media; ok("success"); toast("✅ Фото збережено"); }
@@ -1234,7 +1229,6 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     };
     onMedia.needOne = true;
     mediaEditor($("pMedia"), media, onMedia);
-    bindPlans($("pPlans"), () => view === "profile" && renderProfile());
     $("pGoal").onchange = () => {
       const g = $("pGoal").value === "friends" ? "friends" : "date", cur = $("pSearch").value;
       $("pSearchL").textContent = g === "friends" ? "Хочу знайти" : "Шукаю";
@@ -1253,16 +1247,38 @@ h2 { font: 700 22px/1.2 var(--display); margin: 0 0 6px; letter-spacing: -.01em;
     };
     $("share").onclick = () => tg.openTelegramLink(share);
     $("copy").onclick = async () => { try { await navigator.clipboard.writeText(ME.ref); toast("🔗 Посилання скопійовано"); } catch { sheet(`<h2>Твоє посилання</h2><input value="${esc(ME.ref)}" readonly onclick="this.select()">`); } };
-    $("rules").onclick = showRules;
-    $("why").onclick = showWhy;
-    $("support").onclick = () => openSupport();
-    if ($("homeBtn")) $("homeBtn").onclick = () => { hap("light"); checkHome().then(st => st === "added" ? claimHome("added") : homeSheet()); };
-    $("del").onclick = () => {
-      sheet(`<h2>Видалити анкету?</h2><p class="muted">Фото, лайки й симпатії буде стерто назавжди. Якщо хочеш перепочити — краще увімкни «⏸ Паузу».</p>
-        <button class="btn" id="dPause">⏸ Краще пауза</button><button class="btn danger" id="dYes">🗑 Так, видалити назавжди</button>`);
-      $("dPause").onclick = async () => { await api("profile", { paused: true }); ME.me.paused = true; closeSheet(); renderProfile(); toast("⏸ Анкету приховано"); };
-      $("dYes").onclick = async () => { try { await api("delete", { confirm: "DELETE" }); closeSheet(); toast("Анкету видалено"); ME = await api("me"); $("tabs").hidden = true; card = nextCard = null; document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "feed")); wizard(); } catch (e) { toast(e.message); } };
-    };
+    $("pSettings").onclick = openSettings;
+  }
+
+  // ---------- налаштування (⚙️ вгорі справа): преміум, підтримка, 20 причин, правила, видалення ----------
+  $("gear").onclick = openSettings;
+  function openSettings() {
+    if (!ME?.registered || !ME.me) return;
+    hap("light");
+    const m = ME.me, prem = isPrem();
+    sheet(`<div class="set-h"><h2>⚙️ Налаштування</h2></div>
+      <div class="prem">
+        <h2 style="font-size:19px">${prem ? "💎 Преміум активний" : "💎 Преміум"}</h2>
+        <p class="muted" style="margin:0">${prem ? `${untilText(m.premiumUntil)}. Бачиш усіх, хто тебе лайкнув. Можна продовжити — дні додадуться.` : "Побач усіх, кому ти сподобався(-лась), і відповідай взаємністю. Оплата зірками Telegram — не виходячи з застосунку."}</p>
+        <div id="sPlans">${plansHtml() || `<p class="muted" style="margin:10px 0 0">Оплата тимчасово недоступна — запроси друга, щоб отримати Преміум.</p>`}</div>
+      </div>
+      ${canHome() && (bonusOpen() || !m.homeAdded) ? `<button class="btn${bonusOpen() ? " primary" : ""}" id="sHome" style="margin-top:14px">📲 Додати на головний екран${bonusOpen() ? `<span class="badge-gift">🎁 бонус</span>` : ""}</button>` : ""}
+      <button class="btn" id="sSupport" style="margin-top:14px">💬 Підтримка${ME.supportUnread ? `<span class="badge-n">${ME.supportUnread}</span>` : ""}</button>
+      <button class="btn" id="sWhy">✨ Чому FlirtUA — 20 причин</button>
+      <button class="btn" id="sRules">📜 Правила і безпека</button>
+      <button class="btn danger" id="sDel" style="margin-top:18px">🗑 Видалити анкету</button>`);
+    bindPlans($("sPlans"), () => { if (view === "profile") renderProfile(); if ($("sPlans")) openSettings(); });
+    $("sSupport").onclick = () => openSupport();
+    $("sWhy").onclick = showWhy;
+    $("sRules").onclick = showRules;
+    if ($("sHome")) $("sHome").onclick = () => { hap("light"); closeSheet(); checkHome().then(st => st === "added" ? claimHome("added") : homeSheet()); };
+    $("sDel").onclick = confirmDelete;
+  }
+  function confirmDelete() {
+    sheet(`<h2>Видалити анкету?</h2><p class="muted">Фото, лайки й симпатії буде стерто назавжди. Якщо хочеш перепочити — краще увімкни «⏸ Паузу».</p>
+      <button class="btn" id="dPause">⏸ Краще пауза</button><button class="btn danger" id="dYes">🗑 Так, видалити назавжди</button>`);
+    $("dPause").onclick = async () => { try { await api("profile", { paused: true }); ME.me.paused = true; closeSheet(); if (view === "profile") renderProfile(); toast("⏸ Анкету приховано"); } catch (e) { toast(e.message); } };
+    $("dYes").onclick = async () => { try { await api("delete", { confirm: "DELETE" }); closeSheet(); toast("Анкету видалено"); ME = await api("me"); $("tabs").hidden = true; $("top").hidden = true; card = nextCard = null; document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "feed")); wizard(); } catch (e) { toast(e.message); } };
   }
 
   // ---------- попередній перегляд в адмінці: демо-дані, без Telegram, дизайн приходить через postMessage ----------
