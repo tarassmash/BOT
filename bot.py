@@ -243,7 +243,7 @@ PREV_DEFAULT_PLANS = [{"days": 7, "stars": 250}, {"days": 30, "stars": 750}, {"d
 # якщо в адмінці ціни не міняли (стоять колишні стандартні) — переходимо на новий стандарт
 
 def plans():
-    """Тарифи з адмінки: [{"days": 7, "stars": 75}, ...]"""
+    """Один пакет: Преміум на 7 днів. Ціну в зірках беремо з адмінки (тариф на 7 днів), інакше 250 ⭐."""
     out = []
     for p in SETTINGS.get("plans") or DEFAULT_PLANS:
         try:
@@ -252,7 +252,18 @@ def plans():
                 out.append({"days": d, "stars": s})
         except Exception:
             continue
-    return out or list(DEFAULT_PLANS)
+    week = [p for p in out if p["days"] == 7]
+    return week[:1] or list(DEFAULT_PLANS)
+
+# як саме людина платить — однаково в боті, застосунку й умовах
+PAY_HOW = ("Як оплатити:\n"
+           "1) Натисни «Оплатити» — Telegram відкриє вікно оплати зірками ⭐.\n"
+           "2) Якщо зірок немає, Telegram сам запропонує їх купити: на iPhone — через Apple (App Store / Apple Pay), "
+           "на Android — через Google Play, на комп'ютері — банківською карткою через @PremiumBot. "
+           "Списання йде з картки, прив'язаної до твого Apple ID / Google-акаунта, або з картки, яку ти введеш у Telegram.\n"
+           "3) Перед підтвердженням Telegram покаже точну суму у твоїй валюті. Зазвичай це близько 5 €, "
+           "трохи залежить від країни (податки) і способу купівлі.\n"
+           "Разова оплата, без підписки й автосписань.")
 
 def payments_on():
     return SETTINGS.get("payments", True) is not False
@@ -284,8 +295,8 @@ def premium_until(p):
 def invoice_args(uid, plan):
     d, s = plan["days"], plan["stars"]
     return dict(
-        title=f"Преміум на {plan_title(d)} — ≈{eur(s)}",
-        description=f"«Хто мене лайкнув?» на {d} дн.: бачиш усіх, кому сподобався(-лась), і відповідаєш взаємністю. {s} ⭐ ≈ {eur(s)}.",
+        title=f"Преміум на {d} днів — {s} ⭐",
+        description=f"Разова оплата {s} ⭐ (≈{eur(s)}), без автосписань. {d} днів бачиш усіх, кому сподобався(-лась), і відповідаєш взаємністю.",
         payload=f"prem:{d}:{s}:{uid}",
         currency="XTR",  # зірки Telegram: оплата всередині Telegram, provider_token не потрібен
         prices=[types.LabeledPrice(label=f"Преміум {d} дн.", amount=s)],
@@ -366,13 +377,12 @@ def premium_text(p):
     head = f"💎 <b>Преміум активний до {fmt_until(u)}</b>\nМожна продовжити — дні додадуться.\n\n" if u > time.time() else "💎 <b>Преміум</b>\n\n"
     return (head + "• бачиш усіх, хто тебе лайкнув, — з фото й анкетою\n"
             "• відповідаєш взаємністю одним дотиком\n\n"
-            + "".join(f"💶 <b>{plan_name(x['days'])} — ≈{eur(x['stars'])}</b> ({x['stars']} ⭐)\n" for x in plans()) + "\n"
-            "Оплата зірками Telegram ⭐ прямо тут, без картки й сторонніх сайтів. "
-            "Ціна в євро — приблизна: зірки купуються в Telegram, ціна трохи залежить від країни й телефону.\n"
+            + "".join(f"💶 <b>{x['days']} днів — {x['stars']} ⭐</b> (≈{eur(x['stars'])})\n" for x in plans()) + "\n"
+            + esc(PAY_HOW) + "\n\n"
             f"🎁 Або запроси друга — ви обоє отримаєте {premium_minutes()} хв безкоштовно.")
 
 async def plans_kb(uid):
-    rows = [[(f"{plan_name(p['days'])} — ≈{eur(p['stars'])} · {p['stars']} ⭐", f"buy:{i}")] for i, p in enumerate(plans())] if payments_on() else []
+    rows = [[(f"💎 Оплатити {p['stars']} ⭐ — {p['days']} днів", f"buy:{i}")] for i, p in enumerate(plans())] if payments_on() else []
     link = ref_link(await bot_username(), uid)
     return ikb(rows + [[(B_INVITE, "url:" + share_url(link))]])
 
@@ -403,8 +413,8 @@ async def cb_buy(callback: types.CallbackQuery):
 
 @dp.message(Command("terms"))
 async def cmd_terms(message: types.Message):
-    lst = "\n".join(f"• {plan_name(p['days'])} ({p['days']} дн.) — {p['stars']} ⭐ ≈ {eur(p['stars'])}" for p in plans())
-    lst += "\n\nЦіна в євро приблизна: оплата йде зірками Telegram, а їхня ціна трохи залежить від країни й способу купівлі."
+    lst = "\n".join(f"• Преміум на {p['days']} днів — <b>{p['stars']} ⭐</b> (≈{eur(p['stars'])})" for p in plans())
+    lst += "\n\n" + esc(PAY_HOW)
     await message.answer(
         "📄 <b>Умови Преміуму</b>\n\n" + lst + "\n\n"
         "• Оплата разова, зірками Telegram, без автосписань. Дні додаються до поточного строку.\n"
@@ -1915,7 +1925,7 @@ async def show_likes(chat_id, uid):
             "Ці люди покажуться першими, коли відкриєш анкети 👥\n\n"
             "🔓 Щоб одразу побачити всіх списком — оформи 💎 Преміум за зірки Telegram"
             f" або запроси друга: ви обоє отримаєте Преміум на {premium_minutes()} хв.",
-            parse_mode="HTML", reply_markup=ikb(([[(f"💎 Преміум — від ≈{eur(min(p['stars'] for p in plans()))} на тиждень" if any(p['days'] == 7 for p in plans()) else f"💎 Преміум — від ≈{eur(min(p['stars'] for p in plans()))}", "premium")]] if payments_on() else [])
+            parse_mode="HTML", reply_markup=ikb(([[(f"💎 Преміум — {plans()[0]['stars']} ⭐ за 7 днів", "premium")]] if payments_on() else [])
                                                 + [[("👥 Дивитися анкети", "f:more")], [("🎁 Запросити друга", "url:" + share_url(link))]]))
     await safe_send_message(chat_id, f"💎 <b>Тебе лайкнули: {n}</b>", parse_mode="HTML")
     for like in likes[:10]:
